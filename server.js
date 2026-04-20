@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 // ===============================
-// CONFIG SAFETY CHECK
+// CONFIG
 // ===============================
 const EMAIL = process.env.EMAIL;
 const PASSWORD = process.env.PASSWORD;
@@ -20,7 +20,7 @@ if (!EMAIL || !PASSWORD) {
 }
 
 // ===============================
-// SMTP (SEND EMAIL)
+// SMTP
 // ===============================
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -31,7 +31,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // ===============================
-// FETCH EMAILS (SAFE IMAP)
+// FETCH EMAILS (FIXED SAFE VERSION)
 // ===============================
 async function fetchEmails() {
   if (!EMAIL || !PASSWORD) return [];
@@ -43,21 +43,23 @@ async function fetchEmails() {
       host: "imap.gmail.com",
       port: 993,
       tls: true,
-      authTimeout: 10000
+      authTimeout: 20000
     }
   };
 
+  let connection;
+
   try {
-    const connection = await Imap.connect(config);
+    connection = await Imap.connect(config);
     await connection.openBox("INBOX");
 
     const messages = await connection.search(["ALL"], {
-      bodies: ["HEADER"],
+      bodies: ["HEADER.FIELDS (FROM TO SUBJECT DATE)"],
       markSeen: false
     });
 
     const emails = messages.slice(0, 10).map(item => {
-      const headerPart = item.parts.find(p => p.which === "HEADER");
+      const headerPart = item.parts.find(p => p.which.includes("HEADER"));
       const header = headerPart ? headerPart.body : {};
 
       return {
@@ -67,12 +69,16 @@ async function fetchEmails() {
       };
     });
 
-    connection.end();
     return emails;
 
   } catch (err) {
     console.error("❌ IMAP ERROR:", err.message || err);
     return [];
+
+  } finally {
+    if (connection) {
+      try { connection.end(); } catch (e) {}
+    }
   }
 }
 
@@ -84,9 +90,11 @@ app.get("/", (req, res) => {
 });
 
 // ===============================
-// API: GET EMAILS
+// GET EMAILS
 // ===============================
 app.get("/emails", async (req, res) => {
+  console.log("🔥 /emails request received");
+
   try {
     const emails = await fetchEmails();
     res.json(emails);
@@ -97,7 +105,7 @@ app.get("/emails", async (req, res) => {
 });
 
 // ===============================
-// API: SEND EMAIL
+// SEND EMAIL
 // ===============================
 app.post("/send", async (req, res) => {
   const { to, subject, body } = req.body;
@@ -123,7 +131,7 @@ app.post("/send", async (req, res) => {
 });
 
 // ===============================
-// 🚀 CRITICAL FIX (Render PORT)
+// RENDER FIX
 // ===============================
 const PORT = process.env.PORT || 3000;
 
