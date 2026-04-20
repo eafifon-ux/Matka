@@ -83,12 +83,12 @@ let heptad = false;
 let connected = false;
 let provider = null;
 
-const API_URL = ""; // IMPORTANT: same origin (GitHub Pages -> Render proxy needed OR full URL below)
-
-// 👉 CHANGE THIS to your Render backend:
-const BACKEND = "https://matka-3.onrender.com";
+const BACKEND = window.location.hostname === "localhost"
+  ? "http://localhost:3000"
+  : "https://matka-3.onrender.com";
 
 let emails = [];
+let poller = null;
 
 // ===============================
 // FORMATTER
@@ -134,26 +134,67 @@ function formatGPC(doy, year) {
 }
 
 // ===============================
-// EMAIL FETCH (ROBUST)
+// EMAIL FETCH
 // ===============================
 
 async function loadEmails() {
   try {
     const res = await fetch(`${BACKEND}/emails`);
-
     const text = await res.text();
 
-    // SAFE PARSE (prevents HTML crash like "Pretty print")
     try {
       emails = JSON.parse(text);
     } catch {
-      console.error("Backend did not return JSON:", text);
+      console.error("Non-JSON response:", text);
       emails = [];
     }
 
   } catch (err) {
-    console.error("Email fetch failed:", err);
+    console.error("Fetch failed:", err);
     emails = [];
+  }
+}
+
+// ===============================
+// SEND EMAIL
+// ===============================
+
+async function sendEmail() {
+  const to = document.getElementById("to").value;
+  const subject = document.getElementById("subject").value;
+  const body = document.getElementById("body").value;
+
+  if (!to || !subject) {
+    alert("Missing recipient or subject");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${BACKEND}/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ to, subject, body })
+    });
+
+    const data = await res.json();
+
+    if (!data.ok) {
+      alert("Send failed");
+      return;
+    }
+
+    // clear inputs
+    document.getElementById("to").value = "";
+    document.getElementById("subject").value = "";
+    document.getElementById("body").value = "";
+
+    await loadEmails();
+    renderInbox();
+
+  } catch (err) {
+    console.error("Send error:", err);
   }
 }
 
@@ -172,7 +213,9 @@ async function connect(p) {
   renderInbox();
   updateToday();
 
-  setInterval(async () => {
+  if (poller) clearInterval(poller);
+
+  poller = setInterval(async () => {
     if (connected) {
       await loadEmails();
       renderInbox();
@@ -188,8 +231,16 @@ function renderInbox() {
   const inbox = document.getElementById("inbox");
   inbox.innerHTML = "";
 
+  if (!emails.length) {
+    inbox.innerHTML = `<div class="empty">No messages yet</div>`;
+    return;
+  }
+
   emails.forEach(e => {
-    const days = GPC.daysFromGregorian(new Date(e.date));
+    let date = new Date(e.date);
+    if (isNaN(date.getTime())) date = new Date();
+
+    const days = GPC.daysFromGregorian(date);
     const g = GPC.gpcFromDays(days);
     const gpc = formatGPC(g.doy, g.year);
 
@@ -249,6 +300,5 @@ function updateToday() {
 // ===============================
 
 GPC.initHeptads();
-
 document.getElementById("main-app").style.display = "none";
 updateToday();
