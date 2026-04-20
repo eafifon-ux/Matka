@@ -3,7 +3,6 @@ const nodemailer = require("nodemailer");
 const cors = require("cors");
 require("dotenv").config();
 
-// 🔥 NEW
 const imaps = require("imap-simple");
 const { simpleParser } = require("mailparser");
 
@@ -29,28 +28,12 @@ if (!EMAIL || !PASSWORD) {
 // ===============================
 // IN-MEMORY INBOX
 // ===============================
-let emails = [
-  {
-    id: 1,
-    subject: "Welcome to Matka",
-    from: "system@matka",
-    date: new Date().toISOString(),
-    body: "Welcome email"
-  },
-  {
-    id: 2,
-    subject: "Your GPC system is live",
-    from: "engine@matka",
-    date: new Date().toISOString(),
-    body: "System initialized"
-  }
-];
+let emails = [];
 
-// 🔥 DEDUPE
 const seenUIDs = new Set();
 
 // ===============================
-// SMTP (SEND EMAIL)
+// SMTP
 // ===============================
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -59,20 +42,6 @@ const transporter = nodemailer.createTransport({
     pass: PASSWORD
   }
 });
-
-// ===============================
-// IMAP CONFIG (RECEIVE EMAIL)
-// ===============================
-const imapConfig = {
-  imap: {
-    user: EMAIL,
-    password: PASSWORD, // ⚠️ must be App Password
-    host: "imap.gmail.com",
-    port: 993,
-    tls: true,
-    authTimeout: 5000,
-  }
-};
 
 // ===============================
 // HEALTH CHECK
@@ -89,24 +58,12 @@ app.get("/emails", (req, res) => {
 });
 
 // ===============================
-// SEND EMAIL + SAVE
+// SEND EMAIL
 // ===============================
 app.post("/send", async (req, res) => {
   const { to, subject, body } = req.body;
 
-  if (!EMAIL || !PASSWORD) {
-    return res.status(500).json({ ok: false });
-  }
-
   try {
-    emails.unshift({
-      id: Date.now(),
-      subject,
-      from: EMAIL,
-      date: new Date().toISOString(),
-      body
-    });
-
     await transporter.sendMail({
       from: EMAIL,
       to,
@@ -117,54 +74,64 @@ app.post("/send", async (req, res) => {
     res.json({ ok: true });
 
   } catch (e) {
-    console.error("SEND ERROR:", e);
-    res.json({ ok: false });
+    console.error("SEND ERROR FULL:", e);
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
 // ===============================
-// IMAP FETCH FUNCTION
+// IMAP CONFIG
+// ===============================
+const imapConfig = {
+  imap: {
+    user: EMAIL,
+    password: PASSWORD,
+    host: "imap.gmail.com",
+    port: 993,
+    tls: true,
+    authTimeout: 10000
+  }
+};
+
+// ===============================
+// IMAP SAFE LOOP
 // ===============================
 async function checkInbox() {
+  let connection;
+
   try {
-    const connection = await imaps.connect(imapConfig);
+    connection = await imaps.connect(imapConfig);
     await connection.openBox("INBOX");
 
     const messages = await connection.search(["UNSEEN"], {
       bodies: [""],
-      struct: true,
       markSeen: true
     });
 
-    for (let item of messages) {
+    for (const item of messages) {
       const uid = item.attributes.uid;
-
       if (seenUIDs.has(uid)) continue;
       seenUIDs.add(uid);
 
       const raw = item.parts.find(p => p.which === "").body;
       const parsed = await simpleParser(raw);
 
-      const email = {
+      emails.unshift({
         id: Date.now(),
         subject: parsed.subject || "No subject",
         from: parsed.from?.text || "unknown",
-        date: parsed.date
-          ? new Date(parsed.date).toISOString()
-          : new Date().toISOString(),
+        date: new Date(parsed.date || Date.now()).toISOString(),
         body: parsed.text || ""
-      };
+      });
 
-      emails.unshift(email);
-
-      console.log("📩 IMAP received:", email.subject);
+      console.log("📩 IMAP received:", parsed.subject);
     }
-
-    connection.end();
 
   } catch (err) {
     console.error("IMAP ERROR:", err.message);
   }
+
+  if (connection) connection.end();
 }
 
 // ===============================
@@ -176,5 +143,11 @@ app.listen(PORT, () => {
   console.log(`✅ Mail server running on port ${PORT}`);
 });
 
-// 🔥 START IMAP POLLING
-setInterval(checkInbox, 15000);
+// ===============================
+// START IMAP LOOP (DELAYED START)
+// ===============================
+setTimeout(() => {
+  console.log("📡 Starting IMAP polling...");
+  checkInbox();
+  setInterval(checkInbox, 20000);
+}, 5000);
