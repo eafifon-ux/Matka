@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Matka Mail</title>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <div class="app">
+
+    <h1>Matka Mail</h1>
+
+    <!-- CONNECT SCREEN -->
+    <div id="connect-screen" class="screen">
+      <h2>Connect your account</h2>
+
+      <div class="providers">
+        <button onclick="connect('gmail')">Gmail</button>
+        <button onclick="connect('outlook')">Outlook</button>
+        <button onclick="connect('zoho')">Zoho</button>
+      </div>
+    </div>
+
+    <!-- MAIN APP (hidden initially) -->
+    <div id="main-app" style="display:none;">
+
+      <div id="gpc-display"></div>
+
+      <div id="controls">
+        <button data-mode="DOY" class="active">DOY</button>
+        <button data-mode="DOS">DOS</button>
+        <button data-mode="DOM">DOM</button>
+        <button id="heptad-btn">Heptad</button>
+      </div>
+
+      <!-- Inbox container -->
+      <div id="inbox"></div>
+
+    </div>
+
+  </div>
+
+  <!-- Your logic -->
+  <script src="game.js"></script>
+
+</body>
+</html>
