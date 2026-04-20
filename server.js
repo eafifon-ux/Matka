@@ -21,6 +21,9 @@ app.use(express.urlencoded({ extended: true }));
 const EMAIL = process.env.EMAIL;
 const PASSWORD = process.env.PASSWORD;
 
+console.log("📧 EMAIL LOADED:", EMAIL);
+console.log("🔑 PASSWORD LENGTH:", PASSWORD?.length);
+
 if (!EMAIL || !PASSWORD) {
   console.error("❌ Missing EMAIL or PASSWORD in environment variables");
 }
@@ -29,11 +32,10 @@ if (!EMAIL || !PASSWORD) {
 // IN-MEMORY INBOX
 // ===============================
 let emails = [];
-
 const seenUIDs = new Set();
 
 // ===============================
-// SMTP
+// SMTP (SEND EMAIL)
 // ===============================
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -71,11 +73,16 @@ app.post("/send", async (req, res) => {
       text: body
     });
 
+    console.log("📤 SENT EMAIL:", subject);
+
     res.json({ ok: true });
 
   } catch (e) {
     console.error("SEND ERROR FULL:", e);
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({
+      ok: false,
+      error: e.message
+    });
   }
 });
 
@@ -94,7 +101,7 @@ const imapConfig = {
 };
 
 // ===============================
-// IMAP SAFE LOOP
+// IMAP LOOP (SAFE VERSION)
 // ===============================
 async function checkInbox() {
   let connection;
@@ -110,28 +117,36 @@ async function checkInbox() {
 
     for (const item of messages) {
       const uid = item.attributes.uid;
+
       if (seenUIDs.has(uid)) continue;
       seenUIDs.add(uid);
 
       const raw = item.parts.find(p => p.which === "").body;
       const parsed = await simpleParser(raw);
 
-      emails.unshift({
-        id: Date.now(),
+      const email = {
+        id: uid,
         subject: parsed.subject || "No subject",
         from: parsed.from?.text || "unknown",
         date: new Date(parsed.date || Date.now()).toISOString(),
         body: parsed.text || ""
-      });
+      };
 
-      console.log("📩 IMAP received:", parsed.subject);
+      emails.unshift(email);
+
+      console.log("📩 IMAP received:", email.subject);
     }
 
   } catch (err) {
     console.error("IMAP ERROR:", err.message);
-  }
 
-  if (connection) connection.end();
+  } finally {
+    if (connection) {
+      try {
+        connection.end();
+      } catch {}
+    }
+  }
 }
 
 // ===============================
@@ -144,10 +159,12 @@ app.listen(PORT, () => {
 });
 
 // ===============================
-// START IMAP LOOP (DELAYED START)
+// START IMAP LOOP (STABLE START)
 // ===============================
 setTimeout(() => {
   console.log("📡 Starting IMAP polling...");
+
   checkInbox();
   setInterval(checkInbox, 20000);
-}, 5000);
+
+}, 7000);
