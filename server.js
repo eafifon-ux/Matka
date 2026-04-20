@@ -5,8 +5,12 @@ require("dotenv").config();
 
 const app = express();
 
+// ===============================
+// MIDDLEWARE
+// ===============================
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // 🔥 REQUIRED FOR MAILGUN
 
 // ===============================
 // CONFIG
@@ -19,20 +23,22 @@ if (!EMAIL || !PASSWORD) {
 }
 
 // ===============================
-// IN-MEMORY INBOX (WORKING)
+// IN-MEMORY INBOX
 // ===============================
 let emails = [
   {
     id: 1,
     subject: "Welcome to Matka",
     from: "system@matka",
-    date: new Date().toISOString()
+    date: new Date().toISOString(),
+    body: "Welcome email"
   },
   {
     id: 2,
     subject: "Your GPC system is live",
     from: "engine@matka",
-    date: new Date().toISOString()
+    date: new Date().toISOString(),
+    body: "System initialized"
   }
 ];
 
@@ -55,7 +61,7 @@ app.get("/", (req, res) => {
 });
 
 // ===============================
-// GET EMAILS (NO IMAP)
+// GET EMAILS
 // ===============================
 app.get("/emails", (req, res) => {
   console.log("📥 Returning emails:", emails.length);
@@ -63,7 +69,7 @@ app.get("/emails", (req, res) => {
 });
 
 // ===============================
-// SEND EMAIL + SAVE TO INBOX
+// SEND EMAIL + SAVE
 // ===============================
 app.post("/send", async (req, res) => {
   const { to, subject, body } = req.body;
@@ -73,15 +79,16 @@ app.post("/send", async (req, res) => {
   }
 
   try {
-    // 🔥 ADD TO INBOX FIRST
+    // Save to inbox
     emails.unshift({
       id: Date.now(),
       subject,
       from: EMAIL,
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      body
     });
 
-    // 🔥 SEND REAL EMAIL (optional but nice)
+    // Send real email
     await transporter.sendMail({
       from: EMAIL,
       to,
@@ -98,7 +105,30 @@ app.post("/send", async (req, res) => {
 });
 
 // ===============================
-// RENDER PORT FIX
+// 🔥 RECEIVE EMAIL (MAILGUN)
+// ===============================
+app.post("/incoming-email", (req, res) => {
+  const sender = req.body.sender;
+  const recipient = req.body.recipient;
+  const subject = req.body.subject;
+  const text = req.body["body-plain"];
+
+  console.log("📩 Incoming email:", { sender, subject });
+
+  // Save to inbox
+  emails.unshift({
+    id: Date.now(),
+    subject: subject || "(no subject)",
+    from: sender,
+    date: new Date().toISOString(),
+    body: text || ""
+  });
+
+  res.status(200).send("OK");
+});
+
+// ===============================
+// START SERVER
 // ===============================
 const PORT = process.env.PORT || 3000;
 
