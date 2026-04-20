@@ -83,8 +83,8 @@ let heptad = false;
 let connected = false;
 let provider = null;
 
+// 🔥 IMPORTANT FIX: no localhost (works on Render)
 let emails = [];
-const API_URL = "http://localhost:3000";
 
 // ===============================
 // FORMATTER
@@ -123,22 +123,30 @@ function formatGPC(doy, year) {
   let h = "";
   if (heptad) {
     const o = GPC.heptads[doy];
-    if (o) {
-      h = ` ${String.fromCodePoint(o.suit)} ${o.week}`;
-    }
+    if (o) h = ` ${String.fromCodePoint(o.suit)} ${o.week}`;
   }
 
   return `${emoji} ${core}${h}`;
 }
 
 // ===============================
-// EMAIL API (REAL BACKEND)
+// EMAIL API (FIXED SAFE FETCH)
 // ===============================
 
 async function loadEmails() {
   try {
-    const res = await fetch(`${API_URL}/emails`);
-    emails = await res.json();
+    const res = await fetch("/emails");
+
+    const text = await res.text();
+
+    // Prevent "pretty print HTML response crash"
+    try {
+      emails = JSON.parse(text);
+    } catch (e) {
+      console.error("Invalid JSON from server:", text);
+      emails = [];
+    }
+
   } catch (err) {
     console.error("Email fetch failed:", err);
     emails = [];
@@ -161,7 +169,6 @@ async function connect(p) {
   renderInbox();
   updateToday();
 
-  // auto refresh inbox
   setInterval(async () => {
     if (connected) {
       await loadEmails();
@@ -240,8 +247,6 @@ function updateToday() {
 
 GPC.initHeptads();
 
-// Start hidden
 document.getElementById("main-app").style.display = "none";
 
-// Initial clock
 updateToday();
