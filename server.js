@@ -31,11 +31,11 @@ const transporter = nodemailer.createTransport({
 });
 
 // ===============================
-// FETCH EMAILS (FIXED SAFE VERSION)
+// FETCH EMAILS (FINAL FIXED)
 // ===============================
 async function fetchEmails() {
   if (!EMAIL || !PASSWORD) return [];
-
+  
   const config = {
     imap: {
       user: EMAIL,
@@ -46,35 +46,45 @@ async function fetchEmails() {
       authTimeout: 20000
     }
   };
-
+  
   let connection;
-
+  
   try {
     connection = await Imap.connect(config);
-    await connection.openBox("INBOX");
 
-    const messages = await connection.search(["ALL"], {
-      bodies: ["HEADER.FIELDS (FROM TO SUBJECT DATE)"],
-      markSeen: false
-    });
+    // 🔥 Gmail-safe mailbox
+    await connection.openBox("[Gmail]/All Mail");
 
-    const emails = messages.slice(0, 10).map(item => {
-      const headerPart = item.parts.find(p => p.which.includes("HEADER"));
-      const header = headerPart ? headerPart.body : {};
+    // 🔥 Gmail-safe query (recent emails only)
+    const messages = await connection.search(
+      [['SINCE', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)]],
+      {
+        bodies: ["HEADER.FIELDS (FROM TO SUBJECT DATE)"],
+        markSeen: false
+      }
+    );
 
-      return {
-        subject: header.subject?.[0] || "No subject",
-        from: header.from?.[0] || "unknown",
-        date: header.date?.[0] || new Date().toISOString()
-      };
-    });
+    // 🔥 newest emails first
+    const emails = messages
+      .slice(-10)
+      .reverse()
+      .map(item => {
+        const headerPart = item.parts.find(p => p.which.includes("HEADER"));
+        const header = headerPart ? headerPart.body : {};
+        
+        return {
+          subject: header.subject?.[0] || "No subject",
+          from: header.from?.[0] || "unknown",
+          date: header.date?.[0] || new Date().toISOString()
+        };
+      });
 
     return emails;
-
+    
   } catch (err) {
     console.error("❌ IMAP ERROR:", err.message || err);
     return [];
-
+    
   } finally {
     if (connection) {
       try { connection.end(); } catch (e) {}
@@ -94,7 +104,7 @@ app.get("/", (req, res) => {
 // ===============================
 app.get("/emails", async (req, res) => {
   console.log("🔥 /emails request received");
-
+  
   try {
     const emails = await fetchEmails();
     res.json(emails);
@@ -109,11 +119,11 @@ app.get("/emails", async (req, res) => {
 // ===============================
 app.post("/send", async (req, res) => {
   const { to, subject, body } = req.body;
-
+  
   if (!EMAIL || !PASSWORD) {
     return res.status(500).json({ ok: false, error: "Missing credentials" });
   }
-
+  
   try {
     await transporter.sendMail({
       from: EMAIL,
@@ -121,9 +131,9 @@ app.post("/send", async (req, res) => {
       subject,
       text: body
     });
-
+    
     res.json({ ok: true });
-
+    
   } catch (e) {
     console.error("SEND ERROR:", e);
     res.json({ ok: false });
@@ -131,7 +141,7 @@ app.post("/send", async (req, res) => {
 });
 
 // ===============================
-// RENDER FIX
+// RENDER PORT FIX
 // ===============================
 const PORT = process.env.PORT || 3000;
 
