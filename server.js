@@ -1,0 +1,132 @@
+const express = require("express");
+const nodemailer = require("nodemailer");
+const Imap = require("imap-simple");
+const cors = require("cors");
+require("dotenv").config();
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+// ===============================
+// CONFIG SAFETY CHECK
+// ===============================
+const EMAIL = process.env.EMAIL;
+const PASSWORD = process.env.PASSWORD;
+
+if (!EMAIL || !PASSWORD) {
+  console.error("❌ Missing EMAIL or PASSWORD in environment variables");
+}
+
+// ===============================
+// SMTP (SEND EMAIL)
+// ===============================
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: EMAIL,
+    pass: PASSWORD
+  }
+});
+
+// ===============================
+// FETCH EMAILS (SAFE IMAP)
+// ===============================
+async function fetchEmails() {
+  if (!EMAIL || !PASSWORD) return [];
+
+  const config = {
+    imap: {
+      user: EMAIL,
+      password: PASSWORD,
+      host: "imap.gmail.com",
+      port: 993,
+      tls: true,
+      authTimeout: 10000
+    }
+  };
+
+  try {
+    const connection = await Imap.connect(config);
+    await connection.openBox("INBOX");
+
+    const messages = await connection.search(["ALL"], {
+      bodies: ["HEADER"],
+      markSeen: false
+    });
+
+    const emails = messages.slice(0, 10).map(item => {
+      const headerPart = item.parts.find(p => p.which === "HEADER");
+      const header = headerPart ? headerPart.body : {};
+
+      return {
+        subject: header.subject?.[0] || "No subject",
+        from: header.from?.[0] || "unknown",
+        date: header.date?.[0] || new Date().toISOString()
+      };
+    });
+
+    connection.end();
+    return emails;
+
+  } catch (err) {
+    console.error("❌ IMAP ERROR:", err.message || err);
+    return [];
+  }
+}
+
+// ===============================
+// HEALTH CHECK
+// ===============================
+app.get("/", (req, res) => {
+  res.send("Mail server running OK");
+});
+
+// ===============================
+// API: GET EMAILS
+// ===============================
+app.get("/emails", async (req, res) => {
+  try {
+    const emails = await fetchEmails();
+    res.json(emails);
+  } catch (e) {
+    console.error("EMAIL ROUTE ERROR:", e);
+    res.status(500).json([]);
+  }
+});
+
+// ===============================
+// API: SEND EMAIL
+// ===============================
+app.post("/send", async (req, res) => {
+  const { to, subject, body } = req.body;
+
+  if (!EMAIL || !PASSWORD) {
+    return res.status(500).json({ ok: false, error: "Missing credentials" });
+  }
+
+  try {
+    await transporter.sendMail({
+      from: EMAIL,
+      to,
+      subject,
+      text: body
+    });
+
+    res.json({ ok: true });
+
+  } catch (e) {
+    console.error("SEND ERROR:", e);
+    res.json({ ok: false });
+  }
+});
+
+// ===============================
+// 🚀 CRITICAL FIX (Render PORT)
+// ===============================
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`✅ Mail server running on port ${PORT}`);
+});
