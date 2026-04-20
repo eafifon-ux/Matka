@@ -25,11 +25,13 @@
       </div>
     </div>
 
-    <!-- MAIN APP (hidden initially) -->
+    <!-- MAIN APP -->
     <div id="main-app" style="display:none;">
 
+      <!-- GPC DISPLAY -->
       <div id="gpc-display"></div>
 
+      <!-- CONTROLS -->
       <div id="controls">
         <button data-mode="DOY" class="active">DOY</button>
         <button data-mode="DOS">DOS</button>
@@ -37,14 +39,28 @@
         <button id="heptad-btn">Heptad</button>
       </div>
 
-      <!-- Inbox container -->
-      <div id="inbox"></div>
+      <!-- 🔥 COMPOSER (NEW) -->
+      <div id="composer">
+        <h3>New Message</h3>
+
+        <input id="to" placeholder="To" /><br><br>
+        <input id="subject" placeholder="Subject" /><br><br>
+        <textarea id="body" placeholder="Write your message..."></textarea><br><br>
+
+        <button onclick="sendEmail()">Send</button>
+      </div>
+
+      <!-- 🔥 INBOX -->
+      <div id="inbox-section">
+        <h3>Inbox</h3>
+        <div id="inbox"></div>
+      </div>
 
     </div>
 
   </div>
 
-  <!-- Your logic -->
+  <!-- LOGIC -->
   <script src="game.js"></script>
 
 </body>
