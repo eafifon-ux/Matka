@@ -3,9 +3,6 @@ const nodemailer = require("nodemailer");
 const cors = require("cors");
 require("dotenv").config();
 
-const imaps = require("imap-simple");
-const { simpleParser } = require("mailparser");
-
 const app = express();
 
 // ===============================
@@ -22,36 +19,18 @@ const EMAIL = process.env.EMAIL;
 const PASSWORD = process.env.PASSWORD;
 
 console.log("📧 EMAIL LOADED:", EMAIL);
-console.log("🔑 PASSWORD LENGTH:", PASSWORD?.length);
 
 if (!EMAIL || !PASSWORD) {
   console.error("❌ Missing EMAIL or PASSWORD in environment variables");
 }
 
 // ===============================
-// INBOX (START WITH DEMO)
+// INBOX (REAL DATA ONLY)
 // ===============================
-let emails = [
-  {
-    id: 1,
-    subject: "Welcome to Matka",
-    from: "system@matka",
-    date: new Date().toISOString(),
-    body: "Demo message"
-  },
-  {
-    id: 2,
-    subject: "IMAP system initialized",
-    from: "engine@matka",
-    date: new Date().toISOString(),
-    body: "Backend is running"
-  }
-];
-
-const seenUIDs = new Set();
+let emails = [];
 
 // ===============================
-// SMTP
+// SMTP (SEND EMAIL)
 // ===============================
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -62,10 +41,10 @@ const transporter = nodemailer.createTransport({
 });
 
 // ===============================
-// HEALTH CHECK
+// HEALTH
 // ===============================
 app.get("/", (req, res) => {
-  res.send("Mail server running OK");
+  res.send("Matka Mail Server Running");
 });
 
 // ===============================
@@ -89,94 +68,41 @@ app.post("/send", async (req, res) => {
       text: body
     });
 
-    console.log("📤 SENT EMAIL:", subject);
+    console.log("📤 SENT:", subject);
 
     res.json({ ok: true });
 
   } catch (e) {
-    console.error("SEND ERROR FULL:", e);
-    res.status(500).json({
-      ok: false,
-      error: e.message
-    });
+    console.error("SEND ERROR:", e);
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
 // ===============================
-// IMAP CONFIG
+// 🔥 INCOMING EMAIL (FROM CLOUDFLARE WORKER)
 // ===============================
-const imapConfig = {
-  imap: {
-    user: EMAIL,
-    password: PASSWORD,
-    host: "imap.gmail.com",
-    port: 993,
-    tls: true,
-    authTimeout: 10000
-  }
-};
+app.post("/incoming-email", (req, res) => {
+  const sender = req.body.sender || req.body.from;
+  const subject = req.body.subject || "(no subject)";
+  const body =
+    req.body["body-plain"] ||
+    req.body.text ||
+    "";
 
-// ===============================
-// IMAP LOOP
-// ===============================
-async function checkInbox() {
-  let connection;
+  const email = {
+    id: Date.now(),
+    subject,
+    from: sender,
+    date: new Date().toISOString(),
+    body
+  };
 
-  try {
-    connection = await imaps.connect(imapConfig);
-    await connection.openBox("INBOX");
+  emails.unshift(email);
 
-    const messages = await connection.search(["UNSEEN"], {
-      bodies: [""],
-      markSeen: true
-    });
+  console.log("📩 RECEIVED:", subject);
 
-    if (!messages.length) {
-      console.log("📭 No new IMAP messages");
-    }
-
-    for (const item of messages) {
-      const uid = item.attributes.uid;
-
-      if (seenUIDs.has(uid)) continue;
-      seenUIDs.add(uid);
-
-      const raw = item.parts.find(p => p.which === "").body;
-      const parsed = await simpleParser(raw);
-
-      const email = {
-        id: uid,
-        subject: parsed.subject || "No subject",
-        from: parsed.from?.text || "unknown",
-        date: new Date(parsed.date || Date.now()).toISOString(),
-        body: parsed.text || ""
-      };
-
-      emails.unshift(email);
-
-      console.log("📩 IMAP received:", email.subject);
-    }
-
-  } catch (err) {
-    console.error("IMAP ERROR FULL:", err);
-
-    // 🔥 IMPORTANT: makes failure visible instead of silent
-    emails.unshift({
-      id: Date.now(),
-      subject: "IMAP ERROR (check Gmail login)",
-      from: "system",
-      date: new Date().toISOString(),
-      body: err.message
-    });
-
-  } finally {
-    if (connection) {
-      try {
-        connection.end();
-      } catch {}
-    }
-  }
-}
+  res.status(200).send("OK");
+});
 
 // ===============================
 // START SERVER
@@ -186,14 +112,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Mail server running on port ${PORT}`);
 });
-
-// ===============================
-// START IMAP (SAFE DELAY)
-// ===============================
-setTimeout(() => {
-  console.log("📡 Starting IMAP polling...");
-
-  checkInbox();
-  setInterval(checkInbox, 20000);
-
-}, 5000);
