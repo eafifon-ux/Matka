@@ -29,13 +29,29 @@ if (!EMAIL || !PASSWORD) {
 }
 
 // ===============================
-// IN-MEMORY INBOX
+// INBOX (START WITH DEMO)
 // ===============================
-let emails = [];
+let emails = [
+  {
+    id: 1,
+    subject: "Welcome to Matka",
+    from: "system@matka",
+    date: new Date().toISOString(),
+    body: "Demo message"
+  },
+  {
+    id: 2,
+    subject: "IMAP system initialized",
+    from: "engine@matka",
+    date: new Date().toISOString(),
+    body: "Backend is running"
+  }
+];
+
 const seenUIDs = new Set();
 
 // ===============================
-// SMTP (SEND EMAIL)
+// SMTP
 // ===============================
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -101,7 +117,7 @@ const imapConfig = {
 };
 
 // ===============================
-// IMAP LOOP (SAFE VERSION)
+// IMAP LOOP
 // ===============================
 async function checkInbox() {
   let connection;
@@ -114,6 +130,10 @@ async function checkInbox() {
       bodies: [""],
       markSeen: true
     });
+
+    if (!messages.length) {
+      console.log("📭 No new IMAP messages");
+    }
 
     for (const item of messages) {
       const uid = item.attributes.uid;
@@ -138,7 +158,16 @@ async function checkInbox() {
     }
 
   } catch (err) {
-    console.error("IMAP ERROR:", err.message);
+    console.error("IMAP ERROR FULL:", err);
+
+    // 🔥 IMPORTANT: makes failure visible instead of silent
+    emails.unshift({
+      id: Date.now(),
+      subject: "IMAP ERROR (check Gmail login)",
+      from: "system",
+      date: new Date().toISOString(),
+      body: err.message
+    });
 
   } finally {
     if (connection) {
@@ -159,7 +188,7 @@ app.listen(PORT, () => {
 });
 
 // ===============================
-// START IMAP LOOP (STABLE START)
+// START IMAP (SAFE DELAY)
 // ===============================
 setTimeout(() => {
   console.log("📡 Starting IMAP polling...");
@@ -167,4 +196,4 @@ setTimeout(() => {
   checkInbox();
   setInterval(checkInbox, 20000);
 
-}, 7000);
+}, 5000);
