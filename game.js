@@ -83,7 +83,11 @@ let heptad = false;
 let connected = false;
 let provider = null;
 
-// 🔥 IMPORTANT FIX: no localhost (works on Render)
+const API_URL = ""; // IMPORTANT: same origin (GitHub Pages -> Render proxy needed OR full URL below)
+
+// 👉 CHANGE THIS to your Render backend:
+const BACKEND = "https://matka-3.onrender.com";
+
 let emails = [];
 
 // ===============================
@@ -121,29 +125,29 @@ function formatGPC(doy, year) {
   }
 
   let h = "";
-  if (heptad) {
+  if (heptad && GPC.heptads[doy]) {
     const o = GPC.heptads[doy];
-    if (o) h = ` ${String.fromCodePoint(o.suit)} ${o.week}`;
+    h = ` ${String.fromCodePoint(o.suit)} ${o.week}`;
   }
 
   return `${emoji} ${core}${h}`;
 }
 
 // ===============================
-// EMAIL API (FIXED SAFE FETCH)
+// EMAIL FETCH (ROBUST)
 // ===============================
 
 async function loadEmails() {
   try {
-    const res = await fetch("/emails");
+    const res = await fetch(`${BACKEND}/emails`);
 
     const text = await res.text();
 
-    // Prevent "pretty print HTML response crash"
+    // SAFE PARSE (prevents HTML crash like "Pretty print")
     try {
       emails = JSON.parse(text);
-    } catch (e) {
-      console.error("Invalid JSON from server:", text);
+    } catch {
+      console.error("Backend did not return JSON:", text);
       emails = [];
     }
 
@@ -165,7 +169,6 @@ async function connect(p) {
   document.getElementById("main-app").style.display = "block";
 
   await loadEmails();
-
   renderInbox();
   updateToday();
 
@@ -178,7 +181,7 @@ async function connect(p) {
 }
 
 // ===============================
-// RENDER INBOX
+// RENDER
 // ===============================
 
 function renderInbox() {
@@ -194,8 +197,8 @@ function renderInbox() {
     div.className = "email";
 
     div.innerHTML = `
-      <div class="subject">${e.subject}</div>
-      <div class="meta">${gpc} — ${e.from}</div>
+      <div class="subject">${e.subject ?? "No subject"}</div>
+      <div class="meta">${gpc} — ${e.from ?? "unknown"}</div>
     `;
 
     inbox.appendChild(div);
@@ -230,7 +233,7 @@ document.getElementById("heptad-btn").onclick = () => {
 };
 
 // ===============================
-// TODAY DISPLAY
+// TODAY
 // ===============================
 
 function updateToday() {
@@ -248,5 +251,4 @@ function updateToday() {
 GPC.initHeptads();
 
 document.getElementById("main-app").style.display = "none";
-
 updateToday();
