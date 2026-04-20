@@ -3,6 +3,10 @@ const nodemailer = require("nodemailer");
 const cors = require("cors");
 require("dotenv").config();
 
+// 🔥 NEW
+const imaps = require("imap-simple");
+const { simpleParser } = require("mailparser");
+
 const app = express();
 
 // ===============================
@@ -10,7 +14,7 @@ const app = express();
 // ===============================
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // 🔥 REQUIRED FOR MAILGUN
+app.use(express.urlencoded({ extended: true }));
 
 // ===============================
 // CONFIG
@@ -42,6 +46,9 @@ let emails = [
   }
 ];
 
+// 🔥 DEDUPE
+const seenUIDs = new Set();
+
 // ===============================
 // SMTP (SEND EMAIL)
 // ===============================
@@ -54,6 +61,20 @@ const transporter = nodemailer.createTransport({
 });
 
 // ===============================
+// IMAP CONFIG (RECEIVE EMAIL)
+// ===============================
+const imapConfig = {
+  imap: {
+    user: EMAIL,
+    password: PASSWORD, // ⚠️ must be App Password
+    host: "imap.gmail.com",
+    port: 993,
+    tls: true,
+    authTimeout: 5000,
+  }
+};
+
+// ===============================
 // HEALTH CHECK
 // ===============================
 app.get("/", (req, res) => {
@@ -64,7 +85,6 @@ app.get("/", (req, res) => {
 // GET EMAILS
 // ===============================
 app.get("/emails", (req, res) => {
-  console.log("📥 Returning emails:", emails.length);
   res.json(emails);
 });
 
@@ -75,11 +95,10 @@ app.post("/send", async (req, res) => {
   const { to, subject, body } = req.body;
 
   if (!EMAIL || !PASSWORD) {
-    return res.status(500).json({ ok: false, error: "Missing credentials" });
+    return res.status(500).json({ ok: false });
   }
 
   try {
-    // Save to inbox
     emails.unshift({
       id: Date.now(),
       subject,
@@ -88,7 +107,6 @@ app.post("/send", async (req, res) => {
       body
     });
 
-    // Send real email
     await transporter.sendMail({
       from: EMAIL,
       to,
@@ -105,27 +123,49 @@ app.post("/send", async (req, res) => {
 });
 
 // ===============================
-// 🔥 RECEIVE EMAIL (MAILGUN)
+// IMAP FETCH FUNCTION
 // ===============================
-app.post("/incoming-email", (req, res) => {
-  const sender = req.body.sender;
-  const recipient = req.body.recipient;
-  const subject = req.body.subject;
-  const text = req.body["body-plain"];
+async function checkInbox() {
+  try {
+    const connection = await imaps.connect(imapConfig);
+    await connection.openBox("INBOX");
 
-  console.log("📩 Incoming email:", { sender, subject });
+    const messages = await connection.search(["UNSEEN"], {
+      bodies: [""],
+      struct: true,
+      markSeen: true
+    });
 
-  // Save to inbox
-  emails.unshift({
-    id: Date.now(),
-    subject: subject || "(no subject)",
-    from: sender,
-    date: new Date().toISOString(),
-    body: text || ""
-  });
+    for (let item of messages) {
+      const uid = item.attributes.uid;
 
-  res.status(200).send("OK");
-});
+      if (seenUIDs.has(uid)) continue;
+      seenUIDs.add(uid);
+
+      const raw = item.parts.find(p => p.which === "").body;
+      const parsed = await simpleParser(raw);
+
+      const email = {
+        id: Date.now(),
+        subject: parsed.subject || "No subject",
+        from: parsed.from?.text || "unknown",
+        date: parsed.date
+          ? new Date(parsed.date).toISOString()
+          : new Date().toISOString(),
+        body: parsed.text || ""
+      };
+
+      emails.unshift(email);
+
+      console.log("📩 IMAP received:", email.subject);
+    }
+
+    connection.end();
+
+  } catch (err) {
+    console.error("IMAP ERROR:", err.message);
+  }
+}
 
 // ===============================
 // START SERVER
@@ -135,3 +175,6 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Mail server running on port ${PORT}`);
 });
+
+// 🔥 START IMAP POLLING
+setInterval(checkInbox, 15000);
