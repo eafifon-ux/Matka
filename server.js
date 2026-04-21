@@ -1,74 +1,67 @@
 const express = require("express");
-const fs = require("fs");
 const cors = require("cors");
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
-const DATA_FILE = "./emails.json";
+/* ===============================
+   TEMP IN-MEMORY EMAIL STORE
+=============================== */
 
-// ===============================
-// LOAD EXISTING EMAILS
-// ===============================
-let emails = [];
-
-if (fs.existsSync(DATA_FILE)) {
-  try {
-    emails = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-  } catch {
-    emails = [];
+let emails = [
+  {
+    id: 1,
+    subject: "Welcome to Matka Mail",
+    from: "system@matka.local",
+    date: new Date().toISOString(),
+    body: "Your email system is now working."
+  },
+  {
+    id: 2,
+    subject: "Test Email",
+    from: "demo@matka.local",
+    date: new Date(Date.now() - 3600 * 1000).toISOString(),
+    body: "This is a second test message."
   }
-}
+];
 
-// ===============================
-// SAVE FUNCTION
-// ===============================
-function saveEmails() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(emails, null, 2));
-}
+/* ===============================
+   ROUTES
+=============================== */
 
-// ===============================
-// HEALTH
-// ===============================
-app.get("/", (req, res) => {
-  res.send("Matka Mail Running");
-});
-
-// ===============================
-// GET EMAILS
-// ===============================
+// GET emails
 app.get("/emails", (req, res) => {
   res.json(emails);
 });
 
-// ===============================
-// INCOMING EMAIL
-// ===============================
-app.post("/incoming-email", (req, res) => {
-  const email = {
-    id: Date.now(),
-    subject: req.body.subject || "(no subject)",
-    from: req.body.from || req.body.sender || "unknown",
-    body: req.body.body || req.body.text || "",
+// ADD test email (for debugging)
+app.post("/emails", (req, res) => {
+  const { subject, from, body } = req.body;
+
+  const newEmail = {
+    id: emails.length + 1,
+    subject: subject || "No subject",
+    from: from || "unknown",
+    body: body || "",
     date: new Date().toISOString()
   };
 
-  emails.unshift(email);
+  emails.unshift(newEmail);
 
-  // keep last 200 emails only
-  emails = emails.slice(0, 200);
-
-  saveEmails();
-
-  console.log("📩 EMAIL RECEIVED:", email.subject);
-
-  res.send("OK");
+  res.json({ success: true, email: newEmail });
 });
 
-// ===============================
-// START
-// ===============================
+// health check
+app.get("/", (req, res) => {
+  res.send("Matka Mail server running");
+});
+
+/* ===============================
+   START SERVER
+=============================== */
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server running on", PORT));
+app.listen(PORT, () => {
+  console.log("Server running on port", PORT);
+});
