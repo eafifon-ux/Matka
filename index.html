@@ -16,6 +16,7 @@ body {
 h1 {
   text-align: center;
   margin-bottom: 15px;
+  color: #1e6cff;
 }
 
 #gpc-display {
@@ -165,6 +166,15 @@ h1 {
   padding: 8px 15px;
 }
 
+.message.pending {
+  opacity: 0.7;
+}
+
+.message.error {
+  background: #ffe6e6;
+  border-left-color: #ff4444;
+}
+
 .message .text {
   margin-bottom: 5px;
   line-height: 1.4;
@@ -218,6 +228,11 @@ h1 {
   font-weight: bold;
 }
 
+#send-btn:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+}
+
 .empty-state {
   text-align: center;
   color: #888;
@@ -259,6 +274,25 @@ h1 {
   margin-top: 5px;
   display: none;
 }
+
+.connection-status {
+  text-align: center;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  background: #fff4e6;
+  display: none;
+}
+
+.connection-status.error {
+  background: #ffe6e6;
+  color: #f44336;
+}
+
+.connection-status.success {
+  background: #e8f5e8;
+  color: #4CAF50;
+}
 </style>
 </head>
 
@@ -267,6 +301,8 @@ h1 {
 <h1>Matka Messaging</h1>
 
 <div id="gpc-display"></div>
+
+<div id="connection-status" class="connection-status"></div>
 
 <div id="controls">
   <button data-mode="DOY" class="active">DOY</button>
@@ -297,23 +333,34 @@ h1 {
   
   <div id="messages">
     <div class="empty-state" id="empty-state">
-      Loading messages...
+      No messages yet. Send your first message!
     </div>
   </div>
   
   <div id="input-area">
-    <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off" />
-    <button id="send-btn" onclick="sendMessage()">Send</button>
+    <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off" disabled />
+    <button id="send-btn" onclick="sendMessage()" disabled>Send</button>
   </div>
 </div>
 
 <div class="debug-info">
   <span id="status-indicator" class="status-indicator status-connecting"></span>
   Connected to: <span id="server-status">https://matka-3.onrender.com</span>
-  <span id="message-count"> • Loading...</span>
+  <span id="message-count"> • 0 messages</span>
 </div>
 
 <script>
+/* ===============================
+   CONFIGURATION
+=============================== */
+
+// Auto-detect if we're on Render
+let SERVER = window.location.origin === 'file://' || window.location.hostname === 'localhost' 
+  ? 'http://localhost:3000' 
+  : window.location.origin;
+
+console.log("Using server:", SERVER);
+
 /* ===============================
    GPC ENGINE
 =============================== */
@@ -406,10 +453,10 @@ const GPC = {
 
 let mode = "DOY";
 let heptad = false;
-const SERVER = "https://matka-3.onrender.com";
 let currentMessages = [];
 let messageInterval = null;
 let currentUser = '';
+let pendingMessages = new Map(); // Track pending messages by ID
 
 GPC.initHeptads();
 
@@ -456,25 +503,21 @@ function updateTopBar() {
 
 function setUsername() {
   const input = document.getElementById('username-input');
-  const errorDiv = document.getElementById('setup-error');
   const username = input.value.trim();
   
   if (!username) {
-    errorDiv.textContent = 'Please enter a name';
-    errorDiv.style.display = 'block';
+    showConnectionError('Please enter a name');
     return;
   }
   
   currentUser = username;
-  
-  // Update display
   document.getElementById('user-display').textContent = currentUser;
-  
-  // Show chat, hide setup
   document.getElementById('user-setup').style.display = 'none';
   document.getElementById('chat-container').style.display = 'block';
   
-  // Focus on message input
+  // Enable chat input
+  document.getElementById('message-input').disabled = false;
+  document.getElementById('send-btn').disabled = false;
   document.getElementById('message-input').focus();
   
   // Start loading messages
@@ -486,7 +529,45 @@ function setUsername() {
 }
 
 /* ===============================
-   MESSAGE FUNCTIONS - SIMPLIFIED FOR YOUR SERVER
+   CONNECTION MANAGEMENT
+=============================== */
+
+function updateStatus(status) {
+  const indicator = document.getElementById('status-indicator');
+  indicator.className = 'status-indicator status-' + status;
+  
+  const serverEl = document.getElementById('server-status');
+  if (status === 'connected') {
+    serverEl.style.color = '#4CAF50';
+  } else if (status === 'connecting') {
+    serverEl.style.color = '#FF9800';
+  } else {
+    serverEl.style.color = '#F44336';
+  }
+}
+
+function showConnectionError(message) {
+  const statusEl = document.getElementById('connection-status');
+  statusEl.textContent = message;
+  statusEl.className = 'connection-status error';
+  statusEl.style.display = 'block';
+  setTimeout(() => {
+    statusEl.style.display = 'none';
+  }, 5000);
+}
+
+function showConnectionSuccess(message) {
+  const statusEl = document.getElementById('connection-status');
+  statusEl.textContent = message;
+  statusEl.className = 'connection-status success';
+  statusEl.style.display = 'block';
+  setTimeout(() => {
+    statusEl.style.display = 'none';
+  }, 3000);
+}
+
+/* ===============================
+   MESSAGE FUNCTIONS
 =============================== */
 
 function escapeHtml(text) {
@@ -495,60 +576,59 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function updateStatus(status) {
-  const indicator = document.getElementById('status-indicator');
-  indicator.className = 'status-indicator status-' + status;
-  
-  const serverStatus = document.getElementById('server-status');
-  if (status === 'connected') {
-    serverStatus.style.color = '#4CAF50';
-  } else if (status === 'connecting') {
-    serverStatus.style.color = '#FF9800';
-  } else {
-    serverStatus.style.color = '#F44336';
-  }
-}
-
 async function loadMessages() {
   try {
-    // SIMPLE: Just get all messages (no query param)
+    updateStatus('connecting');
+    
+    // Try to reach server
     const response = await fetch(`${SERVER}/messages`, {
       cache: "no-store",
-      headers: {
-        'Accept': 'application/json'
-      }
+      headers: { 'Accept': 'application/json' }
     });
     
     if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
+      throw new Error(`Server responded with ${response.status}`);
     }
     
-    const messages = await response.json();
+    const data = await response.json();
     
-    // Update if messages changed
-    if (JSON.stringify(messages) !== JSON.stringify(currentMessages)) {
-      currentMessages = messages;
-      renderMessages(messages);
+    // Handle different response formats
+    let messages = [];
+    if (Array.isArray(data)) {
+      messages = data;
+    } else if (data && data.success && data.message) {
+      // Handle single message response
+      messages = [data.message];
+    } else if (data && data.messages) {
+      messages = data.messages;
+    }
+    
+    // Merge pending messages
+    const allMessages = [...messages];
+    for (const [id, pending] of pendingMessages.entries()) {
+      if (!messages.some(m => m.id === id)) {
+        allMessages.push(pending);
+      }
+    }
+    
+    // Update if changed
+    if (JSON.stringify(allMessages) !== JSON.stringify(currentMessages)) {
+      currentMessages = allMessages;
+      renderMessages(allMessages);
       updateStatus('connected');
       
-      // Update message count
+      // Update message count (excluding pending)
+      const confirmedCount = messages.length;
       document.getElementById('message-count').textContent = 
-        ` • ${messages.length} message${messages.length !== 1 ? 's' : ''}`;
+        ` • ${confirmedCount} message${confirmedCount !== 1 ? 's' : ''}`;
     }
     
   } catch (error) {
     console.error("Failed to load messages:", error);
     updateStatus('disconnected');
     
-    // Show error in messages area
-    const container = document.getElementById("messages");
-    if (container) {
-      container.innerHTML = `
-        <div class="message system">
-          <div class="text">Connection error: ${error.message}</div>
-        </div>
-      `;
-    }
+    // Still render what we have
+    renderMessages(currentMessages);
   }
 }
 
@@ -556,49 +636,46 @@ function renderMessages(messages) {
   const container = document.getElementById("messages");
   const emptyState = document.getElementById("empty-state");
   
-  if (!container) return;
-  
   if (!messages || messages.length === 0) {
     emptyState.style.display = 'block';
-    emptyState.textContent = 'No messages yet. Send your first message!';
     container.innerHTML = '';
     return;
   }
   
   emptyState.style.display = 'none';
   
-  // Sort messages by timestamp (oldest to newest)
-  const sortedMessages = [...messages].sort((a, b) => 
-    new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
-  );
+  // Sort by timestamp
+  const sortedMessages = [...messages].sort((a, b) => {
+    const timeA = new Date(a.timestamp || a.time || Date.now());
+    const timeB = new Date(b.timestamp || b.time || Date.now());
+    return timeA - timeB;
+  });
   
   container.innerHTML = sortedMessages.map(msg => {
-    const date = new Date(msg.timestamp || Date.now());
+    const date = new Date(msg.timestamp || msg.time || Date.now());
     const days = GPC.daysFromGregorian(date);
     const gpcDate = GPC.gpcFromDays(days);
     const gpcFormatted = formatGPC(gpcDate);
     
-    // Determine if message is from current user or system
     const isMine = msg.from === currentUser;
     const isSystem = msg.from === 'system';
+    const isPending = msg.pending || pendingMessages.has(msg.id);
+    const isError = msg.error;
     
-    if (isSystem) {
-      return `
-        <div class="message system">
-          <div class="text">${escapeHtml(msg.text || '')}</div>
-          <div class="meta">
-            <span class="sender">System</span>
-            <span class="time">${gpcFormatted}</span>
-          </div>
-        </div>
-      `;
-    }
+    let className = 'message';
+    if (isMine) className += ' mine';
+    if (isSystem) className += ' system';
+    if (isPending) className += ' pending';
+    if (isError) className += ' error';
+    
+    const sender = isSystem ? 'System' : (msg.from || 'Unknown');
+    const text = msg.text || '';
     
     return `
-      <div class="message ${isMine ? 'mine' : ''}">
-        <div class="text">${escapeHtml(msg.text || '')}</div>
+      <div class="${className}">
+        <div class="text">${escapeHtml(text)}</div>
         <div class="meta">
-          <span class="sender">${escapeHtml(msg.from || 'Unknown')}</span>
+          <span class="sender">${escapeHtml(sender)}</span>
           <span class="time">${gpcFormatted}</span>
         </div>
       </div>
@@ -612,26 +689,35 @@ function renderMessages(messages) {
 }
 
 async function sendMessage() {
-  if (!currentUser) {
-    alert('Please enter your name first');
-    return;
-  }
+  if (!currentUser) return;
   
   const input = document.getElementById("message-input");
   const text = input.value.trim();
   
   if (!text) return;
   
-  // Clear input immediately
+  // Clear input
   input.value = '';
   
+  // Create pending message
+  const tempId = Date.now();
+  const pendingMessage = {
+    id: tempId,
+    from: currentUser,
+    text: text,
+    timestamp: new Date().toISOString(),
+    pending: true
+  };
+  
+  pendingMessages.set(tempId, pendingMessage);
+  currentMessages.push(pendingMessage);
+  renderMessages(currentMessages);
+  
   try {
-    // Send to server EXACTLY as your server expects
+    // Send to server
     const response = await fetch(`${SERVER}/messages`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         from: currentUser,
         text: text,
@@ -640,32 +726,45 @@ async function sendMessage() {
     });
     
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `Send failed: ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Failed to send: ${response.status}`);
     }
     
-    // Reload messages to show the new one
-    await loadMessages();
+    const result = await response.json();
+    
+    // Remove pending status
+    pendingMessages.delete(tempId);
+    
+    // Update with server response
+    const index = currentMessages.findIndex(m => m.id === tempId);
+    if (index > -1) {
+      if (result.success && result.message) {
+        currentMessages[index] = result.message;
+      } else {
+        currentMessages[index].pending = false;
+      }
+    }
+    
+    showConnectionSuccess('Message sent!');
     
   } catch (error) {
     console.error("Failed to send message:", error);
     
-    // Show error message
-    const container = document.getElementById("messages");
-    if (container) {
-      const errorMsg = document.createElement('div');
-      errorMsg.className = 'message system';
-      errorMsg.innerHTML = `
-        <div class="text">Failed to send: ${escapeHtml(error.message)}</div>
-      `;
-      container.appendChild(errorMsg);
+    // Mark as error
+    const index = currentMessages.findIndex(m => m.id === tempId);
+    if (index > -1) {
+      currentMessages[index].error = true;
+      currentMessages[index].text = `${text} (Failed: ${error.message})`;
+      pendingMessages.delete(tempId);
     }
     
-    // Put the text back in input so user can try again
-    input.value = text;
+    showConnectionError(`Failed to send: ${error.message}`);
   }
   
-  // Keep focus on input
+  // Reload to get latest from server
+  await loadMessages();
+  
+  // Keep focus
   input.focus();
 }
 
@@ -685,6 +784,9 @@ function handleEnterKey(e) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Update server display
+  document.getElementById('server-status').textContent = SERVER;
+  
   // Set up control buttons
   document.querySelectorAll("[data-mode]").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -700,41 +802,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("heptad-btn").addEventListener("click", () => {
     heptad = !heptad;
-    document.getElementById("heptad-btn").classList.toggle("active", heptad);
+    const btn = document.getElementById("heptad-btn");
+    btn.classList.toggle("active", heptad);
     updateTopBar();
     if (currentUser) {
       renderMessages(currentMessages);
     }
   });
 
-  // Set up enter key for inputs
+  // Enter key handlers
   document.getElementById("username-input").addEventListener("keypress", handleEnterKey);
   document.getElementById("message-input").addEventListener("keypress", handleEnterKey);
   
+  // Set up send button
+  document.getElementById("send-btn").addEventListener("click", sendMessage);
+  
   // Initial load
   updateTopBar();
-  
-  // Update top bar every 10 seconds
   setInterval(updateTopBar, 10000);
   
-  // Focus on username input
-  const usernameInput = document.getElementById("username-input");
-  if (usernameInput) {
-    usernameInput.focus();
-  }
+  // Focus and test connection
+  document.getElementById("username-input").focus();
   
-  // Try to connect to server immediately
+  // Test server connection immediately
   setTimeout(() => {
-    updateStatus('connecting');
-    loadMessages();
-  }, 500);
+    fetch(`${SERVER}/`)
+      .then(() => showConnectionSuccess('Connected to server!'))
+      .catch(() => showConnectionError('Cannot reach server. Is it running?'));
+  }, 1000);
 });
 
-// Clean up interval on page unload
+// Clean up
 window.addEventListener("beforeunload", () => {
-  if (messageInterval) {
-    clearInterval(messageInterval);
-  }
+  if (messageInterval) clearInterval(messageInterval);
 });
 </script>
 
