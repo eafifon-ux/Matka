@@ -3,48 +3,30 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Matka Mail</title>
+<title>Matka Messaging</title>
 
 <style>
 body {
   font-family: Arial, sans-serif;
   background: #f5f7fb;
   padding: 20px;
+  margin: 0;
 }
 
-h1 { text-align: center; }
+h1 {
+  text-align: center;
+  margin-bottom: 15px;
+}
 
 #gpc-display {
   text-align: center;
   font-size: 1.4em;
   font-weight: bold;
-  padding: 10px;
+  padding: 12px;
   background: rgba(30,108,255,0.1);
   border-radius: 10px;
-  margin-bottom: 15px;
-}
-
-#emails {
-  max-width: 600px;
-  margin: auto;
-}
-
-.email {
-  background: white;
-  padding: 12px;
-  border-radius: 8px;
-  margin-bottom: 10px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-}
-
-.subject { font-weight: bold; }
-
-.meta { font-size: 0.9em; color: gray; }
-
-.debug {
-  font-size: 0.75em;
-  color: #888;
-  margin-bottom: 10px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(30,108,255,0.2);
 }
 
 #controls {
@@ -52,6 +34,7 @@ h1 { text-align: center; }
   justify-content: center;
   gap: 10px;
   margin-bottom: 20px;
+  flex-wrap: wrap;
 }
 
 #controls button {
@@ -60,18 +43,140 @@ h1 { text-align: center; }
   border: 1px solid #aac7ff;
   background: white;
   cursor: pointer;
+  font-size: 0.9em;
+  transition: all 0.2s;
+}
+
+#controls button:hover {
+  background: #f0f5ff;
 }
 
 #controls button.active {
   background: #1e6cff;
   color: white;
+  border-color: #1e6cff;
+}
+
+#chat-container {
+  max-width: 600px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+
+#messages {
+  height: 400px;
+  overflow-y: auto;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message {
+  padding: 12px 15px;
+  border-radius: 8px;
+  background: #f8f9ff;
+  border-left: 3px solid #1e6cff;
+}
+
+.message.mine {
+  background: #e8f0ff;
+  border-left-color: #4d94ff;
+  margin-left: 20px;
+}
+
+.message.system {
+  background: #fff4e6;
+  border-left-color: #ffa726;
+  text-align: center;
+  font-style: italic;
+}
+
+.message .text {
+  margin-bottom: 5px;
+  line-height: 1.4;
+}
+
+.message .meta {
+  font-size: 0.75em;
+  color: #666;
+  display: flex;
+  justify-content: space-between;
+}
+
+.message .meta .sender {
+  font-weight: bold;
+  color: #1e6cff;
+}
+
+.message.mine .meta .sender {
+  color: #4d94ff;
+}
+
+#input-area {
+  padding: 15px;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  gap: 10px;
+  background: #fafbff;
+}
+
+#message-input {
+  flex: 1;
+  padding: 12px 15px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1em;
+}
+
+#message-input:focus {
+  outline: none;
+  border-color: #1e6cff;
+  box-shadow: 0 0 0 2px rgba(30,108,255,0.1);
+}
+
+#send-btn {
+  padding: 12px 20px;
+  background: #1e6cff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.2s;
+}
+
+#send-btn:hover {
+  background: #0a5ae0;
+}
+
+#send-btn:active {
+  transform: translateY(1px);
+}
+
+.empty-state {
+  text-align: center;
+  color: #888;
+  padding: 40px 20px;
+  font-style: italic;
+}
+
+.debug-info {
+  font-size: 0.7em;
+  color: #aaa;
+  text-align: center;
+  margin-top: 10px;
+  padding: 5px;
 }
 </style>
 </head>
 
 <body>
 
-<h1>Matka Mail</h1>
+<h1>Matka Messaging</h1>
 
 <div id="gpc-display"></div>
 
@@ -82,11 +187,26 @@ h1 { text-align: center; }
   <button id="heptad-btn">Heptad</button>
 </div>
 
-<div id="emails"></div>
+<div id="chat-container">
+  <div id="messages">
+    <div class="empty-state" id="empty-state">
+      No messages yet. Send your first message!
+    </div>
+  </div>
+  
+  <div id="input-area">
+    <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off" />
+    <button id="send-btn" onclick="sendMessage()">Send</button>
+  </div>
+</div>
+
+<div class="debug-info">
+  Connected to: <span id="server-status">https://matka-3.onrender.com</span>
+</div>
 
 <script>
 /* ===============================
-   GPC ENGINE (UNCHANGED)
+   GPC ENGINE (UNCHANGED FROM FIRST VERSION)
 =============================== */
 
 const GPC = {
@@ -171,13 +291,24 @@ const GPC = {
   }
 };
 
+/* ===============================
+   APPLICATION STATE
+=============================== */
+
 let mode = "DOY";
 let heptad = false;
+const SERVER = "https://matka-3.onrender.com";
+let currentMessages = [];
+let messageInterval = null;
+
+/* ===============================
+   INITIALIZE GPC
+=============================== */
 
 GPC.initHeptads();
 
 /* ===============================
-   FORMATTER
+   GPC FORMATTER (FROM FIRST VERSION)
 =============================== */
 
 function formatGPC(gpcDate) {
@@ -215,7 +346,7 @@ function formatGPC(gpcDate) {
 }
 
 /* ===============================
-   TOP BAR
+   TOP BAR UPDATE
 =============================== */
 
 function updateTopBar() {
@@ -225,70 +356,171 @@ function updateTopBar() {
 }
 
 /* ===============================
-   EMAIL LOADER (FINAL DEBUG VERSION)
+   MESSAGE FUNCTIONS
 =============================== */
 
-async function loadEmails() {
-  const container = document.getElementById("emails");
-
+async function loadMessages() {
   try {
-    const res = await fetch("https://matka-3.onrender.com/emails", {
-      cache: "no-store"
+    const res = await fetch(`${SERVER}/messages`, {
+      cache: "no-store",
+      headers: {
+        'Accept': 'application/json'
+      }
     });
-
-    const rawText = await res.clone().text(); // debug raw response
-
-    let data;
-    try {
-      data = await res.json();
-    } catch (e) {
-      container.innerHTML = `
-        <div class="email">
-          <div class="subject">Parse Error</div>
-          <p>Server did not return JSON</p>
-          <div class="debug">${rawText}</div>
-        </div>
-      `;
-      return;
+    
+    if (!res.ok) {
+      throw new Error(`Server error: ${res.status}`);
     }
-
-    // normalize API shapes
-    data = data?.emails || data?.data || data;
-
-    if (!Array.isArray(data)) data = [];
-
-    if (data.length === 0) {
-      data = [{
-        subject: "Test Email",
-        from: "system@matka.local",
-        date: new Date().toISOString(),
-        body: "Fallback email (API empty or broken)"
-      }];
+    
+    const data = await res.json();
+    const messages = Array.isArray(data) ? data : (data.messages || data.data || []);
+    
+    // Only update if messages changed
+    if (JSON.stringify(messages) !== JSON.stringify(currentMessages)) {
+      currentMessages = messages;
+      renderMessages(messages);
     }
+  } catch (error) {
+    console.error("Failed to load messages:", error);
+    if (currentMessages.length === 0) {
+      showSystemMessage(`Connection error: ${error.message}. Retrying...`);
+    }
+  }
+}
 
-    container.innerHTML = data.map(e => {
-      const date = new Date(e.date || Date.now());
-      const days = GPC.daysFromGregorian(date);
-      const gpcDate = GPC.gpcFromDays(days);
-      const gpc = formatGPC(gpcDate);
-
-      return `
-        <div class="email">
-          <div class="subject">${e.subject || "No subject"}</div>
-          <div class="meta">${e.from || "unknown"}</div>
-          <div class="meta">${gpc}</div>
-          <p>${e.body || ""}</p>
+function renderMessages(messages) {
+  const container = document.getElementById("messages");
+  const emptyState = document.getElementById("empty-state");
+  
+  if (messages.length === 0) {
+    emptyState.style.display = 'block';
+    container.innerHTML = '';
+    return;
+  }
+  
+  emptyState.style.display = 'none';
+  
+  // Sort messages by time (newest at bottom)
+  messages.sort((a, b) => new Date(a.time || 0) - new Date(b.time || 0));
+  
+  container.innerHTML = messages.map(msg => {
+    const date = new Date(msg.time || Date.now());
+    const days = GPC.daysFromGregorian(date);
+    const gpcDate = GPC.gpcFromDays(days);
+    const gpcFormatted = formatGPC(gpcDate);
+    
+    const isMine = msg.from === "user" || msg.from === localStorage.getItem('username') || msg.from?.toLowerCase().includes('you');
+    
+    return `
+      <div class="message ${isMine ? 'mine' : ''}">
+        <div class="text">${escapeHtml(msg.text || '')}</div>
+        <div class="meta">
+          <span class="sender">${escapeHtml(msg.from || 'Unknown')}</span>
+          <span class="time">${gpcFormatted}</span>
         </div>
-      `;
-    }).join("");
-
-  } catch (err) {
-    container.innerHTML = `
-      <div class="email">
-        <div class="subject">Network Error</div>
-        <p>${err.message}</p>
       </div>
     `;
+  }).join('');
+  
+  // Scroll to bottom
+  setTimeout(() => {
+    container.scrollTop = container.scrollHeight;
+  }, 10);
+}
+
+function showSystemMessage(text) {
+  const container = document.getElementById("messages");
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'message system';
+  messageDiv.innerHTML = `
+    <div class="text">${escapeHtml(text)}</div>
+  `;
+  container.appendChild(messageDiv);
+  container.scrollTop = container.scrollHeight;
+}
+
+async function sendMessage() {
+  const input = document.getElementById("message-input");
+  const text = input.value.trim();
+  
+  if (!text) return;
+  
+  // Add temporary local message
+  const tempMsg = {
+    from: "You",
+    text: text,
+    time: new Date().toISOString(),
+    pending: true
+  };
+  
+  const days = GPC.daysFromGregorian(new Date());
+  const gpcDate = GPC.gpcFromDays(days);
+  const gpcFormatted = formatGPC(gpcDate);
+  
+  const container = document.getElementById("messages");
+  const emptyState = document.getElementById("empty-state");
+  emptyState.style.display = 'none';
+  
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'message mine';
+  messageDiv.innerHTML = `
+    <div class="text">${escapeHtml(text)}</div>
+    <div class="meta">
+      <span class="sender">You</span>
+      <span class="time">${gpcFormatted} (sending...)</span>
+    </div>
+  `;
+  container.appendChild(messageDiv);
+  container.scrollTop = container.scrollHeight;
+  
+  // Clear input
+  input.value = '';
+  
+  try {
+    // Send to server
+    const response = await fetch(`${SERVER}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: "user",
+        text: text,
+        time: new Date().toISOString()
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Send failed: ${response.status}`);
+    }
+    
+    // Update the pending message status
+    messageDiv.querySelector('.time').textContent = gpcFormatted;
+    
+    // Reload all messages
+    await loadMessages();
+    
+  } catch (error) {
+    console.error("Failed to send message:", error);
+    messageDiv.querySelector('.time').textContent = `${gpcFormatted} (failed)`;
+    messageDiv.style.opacity = '0.7';
+  }
+}
+
+/* ===============================
+   HELPER FUNCTIONS
+=============================== */
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function handleEnterKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
   }
 }
 
@@ -297,31 +529,51 @@ async function loadEmails() {
 =============================== */
 
 document.querySelectorAll("[data-mode]").forEach(btn => {
-  btn.onclick = () => {
+  btn.addEventListener("click", () => {
     document.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     mode = btn.dataset.mode;
     updateTopBar();
-    loadEmails();
-  };
+    renderMessages(currentMessages); // Re-render messages with new format
+  });
 });
 
-document.getElementById("heptad-btn").onclick = () => {
+document.getElementById("heptad-btn").addEventListener("click", () => {
   heptad = !heptad;
   document.getElementById("heptad-btn").classList.toggle("active", heptad);
   updateTopBar();
-  loadEmails();
-};
+  renderMessages(currentMessages); // Re-render messages with new format
+});
 
 /* ===============================
-   INIT
+   INITIALIZATION
 =============================== */
 
 window.addEventListener("load", () => {
+  // Initialize top bar
   updateTopBar();
-  loadEmails();
+  
+  // Load initial messages
+  loadMessages();
+  
+  // Set up auto-refresh
+  messageInterval = setInterval(loadMessages, 3000);
+  
+  // Set up top bar refresh
   setInterval(updateTopBar, 10000);
-  setInterval(loadEmails, 5000);
+  
+  // Set up enter key
+  document.getElementById("message-input").addEventListener("keypress", handleEnterKey);
+  
+  // Focus input
+  document.getElementById("message-input").focus();
+});
+
+// Clean up interval on page unload
+window.addEventListener("beforeunload", () => {
+  if (messageInterval) {
+    clearInterval(messageInterval);
+  }
 });
 </script>
 
