@@ -41,6 +41,12 @@ h1 { text-align: center; }
 
 .meta { font-size: 0.9em; color: gray; }
 
+.debug {
+  font-size: 0.75em;
+  color: #888;
+  margin-bottom: 10px;
+}
+
 #controls {
   display: flex;
   justify-content: center;
@@ -219,7 +225,7 @@ function updateTopBar() {
 }
 
 /* ===============================
-   EMAIL LOADER (ROBUST FIX)
+   EMAIL LOADER (FINAL DEBUG VERSION)
 =============================== */
 
 async function loadEmails() {
@@ -230,16 +236,24 @@ async function loadEmails() {
       cache: "no-store"
     });
 
-    let data = [];
+    const rawText = await res.clone().text(); // debug raw response
 
-    if (res.ok) {
-      try {
-        data = await res.json();
-      } catch (e) {
-        container.innerHTML = `<div class="email"><p>JSON parse error</p></div>`;
-        return;
-      }
+    let data;
+    try {
+      data = await res.json();
+    } catch (e) {
+      container.innerHTML = `
+        <div class="email">
+          <div class="subject">Parse Error</div>
+          <p>Server did not return JSON</p>
+          <div class="debug">${rawText}</div>
+        </div>
+      `;
+      return;
     }
+
+    // normalize API shapes
+    data = data?.emails || data?.data || data;
 
     if (!Array.isArray(data)) data = [];
 
@@ -271,9 +285,8 @@ async function loadEmails() {
   } catch (err) {
     container.innerHTML = `
       <div class="email">
-        <div class="subject">Test Email</div>
-        <div class="meta">system@matka.local</div>
-        <p>Fetch failed: ${err.message}</p>
+        <div class="subject">Network Error</div>
+        <p>${err.message}</p>
       </div>
     `;
   }
