@@ -445,13 +445,13 @@ h1 {
 <div class="server-config">
   <label for="server-input">Server URL:</label>
   <input type="text" id="server-input" value="https://matka-1iig.onrender.com" />
-  <button onclick="updateServer()">Update</button>
+  <button id="update-server-btn">Update</button>
 </div>
 
 <div id="user-setup">
   <h3>Enter Your Name</h3>
   <input type="text" id="username-input" placeholder="What's your name?" />
-  <button id="set-username-btn" onclick="setUsername()">Start Chatting</button>
+  <button id="set-username-btn">Start Chatting</button>
   <div id="setup-error" class="error-message"></div>
   <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
     <strong>How to chat with friends:</strong><br>
@@ -467,7 +467,7 @@ h1 {
     <h3>Matka Messaging</h3>
     <div style="display: flex; align-items: center; gap: 10px;">
       <div>You: <span id="user-display"></span></div>
-      <button class="refresh-btn" onclick="forceRefresh()" title="Refresh messages">↻</button>
+      <button class="refresh-btn" id="force-refresh-btn" title="Refresh messages">↻</button>
     </div>
   </div>
   
@@ -479,7 +479,7 @@ h1 {
   
   <div id="input-area">
     <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off" disabled />
-    <button id="send-btn" onclick="sendMessage()" disabled>Send</button>
+    <button id="send-btn">Send</button>
   </div>
 </div>
 
@@ -489,7 +489,7 @@ h1 {
   <span id="message-count"> • 0 messages</span>
 </div>
 
-<button class="debug-btn" onclick="debugServerResponse()">Debug</button>
+<button class="debug-btn" id="debug-btn">Debug</button>
 
 <!-- DEBUG MODAL -->
 <div id="debug-modal" class="debug-modal">
@@ -497,8 +497,8 @@ h1 {
     <h3>Server Debug Info</h3>
     <div id="debug-text" class="debug-text"></div>
     <div class="debug-buttons">
-      <button class="copy-btn" onclick="copyDebugInfo()">Copy to Clipboard</button>
-      <button class="close-btn" onclick="closeDebugModal()">Close</button>
+      <button class="copy-btn" id="copy-debug-btn">Copy to Clipboard</button>
+      <button class="close-btn" id="close-debug-btn">Close</button>
     </div>
   </div>
 </div>
@@ -601,7 +601,6 @@ const GPC = {
 let mode = "DOY";
 let heptad = false;
 let currentMessages = [];
-let pendingMessages = new Map(); // Track messages being sent
 let messageInterval = null;
 let currentUser = '';
 
@@ -659,8 +658,11 @@ function updateServer() {
   document.getElementById('server-status').textContent = SERVER;
   showConnectionSuccess(`Server updated to: ${SERVER}`);
   
+  // Clear any existing interval and restart
+  if (messageInterval) clearInterval(messageInterval);
   if (currentUser) {
     loadMessages();
+    messageInterval = setInterval(loadMessages, 500);
   }
 }
 
@@ -685,8 +687,10 @@ function setUsername() {
   document.getElementById('send-btn').disabled = false;
   document.getElementById('message-input').focus();
   
+  // Load messages immediately
   loadMessages();
   
+  // Start polling - EVERY 500ms!
   if (messageInterval) clearInterval(messageInterval);
   messageInterval = setInterval(loadMessages, 500);
 }
@@ -745,7 +749,7 @@ function showConnectionSuccess(message) {
 }
 
 /* ===============================
-   MESSAGE FUNCTIONS - SIMPLE WORKING VERSION
+   MESSAGE FUNCTIONS - FIXED VERSION!
 =============================== */
 function escapeHtml(text) {
   const div = document.createElement('div');
@@ -754,7 +758,7 @@ function escapeHtml(text) {
 }
 
 function forceRefresh() {
-  console.log("Manual refresh triggered");
+  console.log("Force refresh triggered");
   loadMessages();
 }
 
@@ -762,16 +766,23 @@ async function loadMessages() {
   try {
     updateStatus('connecting');
     
-    console.log(`Fetching from: ${SERVER}/messages?_=${Date.now()}`);
-    
-    const response = await fetch(`${SERVER}/messages?_=${Date.now()}`);
+    // CRITICAL FIX: Kill all caching with proper headers
+    const response = await fetch(`${SERVER}/messages?_=${Date.now()}`, {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+      }
+    });
     
     if (!response.ok) {
       throw new Error(`Server error: ${response.status}`);
     }
     
     const messages = await response.json();
-    console.log(`Received ${messages.length} messages`);
+    console.log(`LOADED: ${messages.length} messages`);
     
     currentMessages = messages;
     renderMessages(messages);
@@ -814,7 +825,10 @@ function renderMessages(messages) {
   
   emptyState.style.display = 'none';
   
-  container.innerHTML = messages.map(msg => {
+  // CRITICAL FIX: Clear container first to force repaint
+  container.innerHTML = '';
+  
+  const html = messages.map(msg => {
     const date = new Date(msg.timestamp || Date.now());
     const days = GPC.daysFromGregorian(date);
     const gpcDate = GPC.gpcFromDays(days);
@@ -841,6 +855,8 @@ function renderMessages(messages) {
     `;
   }).join('');
   
+  container.innerHTML = html;
+  
   setTimeout(() => {
     if (container) {
       container.scrollTop = container.scrollHeight;
@@ -849,7 +865,7 @@ function renderMessages(messages) {
 }
 
 /* ===============================
-   SEND MESSAGE - SIMPLE WORKING VERSION
+   SEND MESSAGE - ULTIMATE FIX!
 =============================== */
 async function sendMessage() {
   if (!currentUser) {
@@ -867,6 +883,7 @@ async function sendMessage() {
     return;
   }
   
+  // Clear input immediately
   input.value = '';
   input.disabled = true;
   
@@ -889,27 +906,16 @@ async function sendMessage() {
       throw new Error(`Failed to send: ${response.status} ${errorText}`);
     }
     
+    // CRITICAL FIX: Immediately reload messages after sending
     await loadMessages();
     
-    const messages = await response.json();
-    console.log("Send successful, got", messages.length, "messages");
-    
-    // Update with server response
-    currentMessages = messages;
-    renderMessages(messages);
     showConnectionSuccess('Message sent!');
-    
-    // Update message count
-    const messageCountEl = document.getElementById('message-count');
-    if (messageCountEl) {
-      messageCountEl.textContent = ` • ${messages.length} message${messages.length !== 1 ? 's' : ''}`;
-    }
     
   } catch (error) {
     console.error("Failed to send message:", error);
     showConnectionError(`Failed to send: ${error.message}`);
     
-    // Restore the text
+    // Restore the text so user can retry
     input.value = text;
   } finally {
     input.disabled = false;
@@ -943,7 +949,7 @@ function copyDebugInfo() {
     const text = textEl.textContent;
     
     navigator.clipboard.writeText(text).then(() => {
-      const copyBtn = document.querySelector('.copy-btn');
+      const copyBtn = document.getElementById('copy-debug-btn');
       const originalText = copyBtn.textContent;
       copyBtn.textContent = 'Copied!';
       copyBtn.style.background = '#4CAF50';
@@ -1031,7 +1037,18 @@ async function debugServerResponse() {
 }
 
 /* ===============================
-   INITIALIZATION
+   GLOBAL POLLING - CRITICAL FIX!
+=============================== */
+// Force polling globally (even before user logs in)
+const globalPollInterval = setInterval(() => {
+  console.log("FORCE POLL - checking for new messages");
+  if (currentUser) {
+    loadMessages();
+  }
+}, 1000);
+
+/* ===============================
+   INITIALIZATION - CLEAN EVENT BINDING!
 =============================== */
 document.addEventListener("DOMContentLoaded", () => {
   const serverStatusEl = document.getElementById('server-status');
@@ -1039,6 +1056,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (serverStatusEl) serverStatusEl.textContent = SERVER;
   if (serverInputEl) serverInputEl.value = SERVER;
   
+  // Mode buttons
   document.querySelectorAll("[data-mode]").forEach(btn => {
     btn.addEventListener("click", () => {
       document.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
@@ -1051,6 +1069,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  // Heptad button
   const heptadBtn = document.getElementById("heptad-btn");
   if (heptadBtn) {
     heptadBtn.addEventListener("click", () => {
@@ -1063,6 +1082,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Username input
   const usernameInput = document.getElementById("username-input");
   if (usernameInput) {
     usernameInput.addEventListener("keypress", (e) => {
@@ -1070,6 +1090,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
   
+  // Message input
   const messageInput = document.getElementById("message-input");
   if (messageInput) {
     messageInput.addEventListener("keypress", (e) => {
@@ -1077,6 +1098,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
   
+  // Server input
   const serverInput = document.getElementById("server-input");
   if (serverInput) {
     serverInput.addEventListener("keypress", (e) => {
@@ -1084,15 +1106,14 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
   
-  const sendBtn = document.getElementById("send-btn");
-  if (sendBtn) {
-    sendBtn.addEventListener("click", sendMessage);
-  }
-  
-  const setUsernameBtn = document.getElementById("set-username-btn");
-  if (setUsernameBtn) {
-    setUsernameBtn.addEventListener("click", setUsername);
-  }
+  // Buttons - NO DUPLICATE BINDING!
+  document.getElementById('set-username-btn').addEventListener("click", setUsername);
+  document.getElementById('send-btn').addEventListener("click", sendMessage);
+  document.getElementById('update-server-btn').addEventListener("click", updateServer);
+  document.getElementById('force-refresh-btn').addEventListener("click", forceRefresh);
+  document.getElementById('debug-btn').addEventListener("click", debugServerResponse);
+  document.getElementById('close-debug-btn').addEventListener("click", closeDebugModal);
+  document.getElementById('copy-debug-btn').addEventListener("click", copyDebugInfo);
   
   updateTopBar();
   setInterval(updateTopBar, 10000);
@@ -1101,6 +1122,7 @@ document.addEventListener("DOMContentLoaded", () => {
     usernameInput.focus();
   }
   
+  // Initial connection test
   setTimeout(() => {
     console.log("Testing server connection...");
     fetch(`${SERVER}/health`, { 
