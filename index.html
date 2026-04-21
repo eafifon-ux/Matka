@@ -315,7 +315,7 @@ h1 {
 
 <script>
 /* ===============================
-   GPC ENGINE (UNCHANGED)
+   GPC ENGINE
 =============================== */
 
 const GPC = {
@@ -486,7 +486,7 @@ function setUsername() {
 }
 
 /* ===============================
-   MESSAGE FUNCTIONS
+   MESSAGE FUNCTIONS - SIMPLIFIED FOR YOUR SERVER
 =============================== */
 
 function escapeHtml(text) {
@@ -499,21 +499,20 @@ function updateStatus(status) {
   const indicator = document.getElementById('status-indicator');
   indicator.className = 'status-indicator status-' + status;
   
+  const serverStatus = document.getElementById('server-status');
   if (status === 'connected') {
-    document.getElementById('server-status').style.color = '#4CAF50';
+    serverStatus.style.color = '#4CAF50';
   } else if (status === 'connecting') {
-    document.getElementById('server-status').style.color = '#FF9800';
+    serverStatus.style.color = '#FF9800';
   } else {
-    document.getElementById('server-status').style.color = '#F44336';
+    serverStatus.style.color = '#F44336';
   }
 }
 
 async function loadMessages() {
-  if (!currentUser) return;
-  
   try {
-    // Load messages from server with user filter
-    const response = await fetch(`${SERVER}/messages?user=${encodeURIComponent(currentUser)}`, {
+    // SIMPLE: Just get all messages (no query param)
+    const response = await fetch(`${SERVER}/messages`, {
       cache: "no-store",
       headers: {
         'Accept': 'application/json'
@@ -543,11 +542,13 @@ async function loadMessages() {
     
     // Show error in messages area
     const container = document.getElementById("messages");
-    container.innerHTML = `
-      <div class="message system">
-        <div class="text">Cannot connect to server: ${error.message}</div>
-      </div>
-    `;
+    if (container) {
+      container.innerHTML = `
+        <div class="message system">
+          <div class="text">Connection error: ${error.message}</div>
+        </div>
+      `;
+    }
   }
 }
 
@@ -555,8 +556,11 @@ function renderMessages(messages) {
   const container = document.getElementById("messages");
   const emptyState = document.getElementById("empty-state");
   
-  if (messages.length === 0) {
+  if (!container) return;
+  
+  if (!messages || messages.length === 0) {
     emptyState.style.display = 'block';
+    emptyState.textContent = 'No messages yet. Send your first message!';
     container.innerHTML = '';
     return;
   }
@@ -564,9 +568,11 @@ function renderMessages(messages) {
   emptyState.style.display = 'none';
   
   // Sort messages by timestamp (oldest to newest)
-  messages.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+  const sortedMessages = [...messages].sort((a, b) => 
+    new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
+  );
   
-  container.innerHTML = messages.map(msg => {
+  container.innerHTML = sortedMessages.map(msg => {
     const date = new Date(msg.timestamp || Date.now());
     const days = GPC.daysFromGregorian(date);
     const gpcDate = GPC.gpcFromDays(days);
@@ -620,7 +626,7 @@ async function sendMessage() {
   input.value = '';
   
   try {
-    // Send to server (no temp message - server responds fast)
+    // Send to server EXACTLY as your server expects
     const response = await fetch(`${SERVER}/messages`, {
       method: "POST",
       headers: {
@@ -629,7 +635,7 @@ async function sendMessage() {
       body: JSON.stringify({
         from: currentUser,
         text: text,
-        to: "all"  // Send to everyone
+        to: "all"
       })
     });
     
@@ -646,12 +652,14 @@ async function sendMessage() {
     
     // Show error message
     const container = document.getElementById("messages");
-    const errorMsg = document.createElement('div');
-    errorMsg.className = 'message system';
-    errorMsg.innerHTML = `
-      <div class="text">Failed to send: ${escapeHtml(error.message)}</div>
-    `;
-    container.appendChild(errorMsg);
+    if (container) {
+      const errorMsg = document.createElement('div');
+      errorMsg.className = 'message system';
+      errorMsg.innerHTML = `
+        <div class="text">Failed to send: ${escapeHtml(error.message)}</div>
+      `;
+      container.appendChild(errorMsg);
+    }
     
     // Put the text back in input so user can try again
     input.value = text;
@@ -710,7 +718,16 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(updateTopBar, 10000);
   
   // Focus on username input
-  document.getElementById("username-input").focus();
+  const usernameInput = document.getElementById("username-input");
+  if (usernameInput) {
+    usernameInput.focus();
+  }
+  
+  // Try to connect to server immediately
+  setTimeout(() => {
+    updateStatus('connecting');
+    loadMessages();
+  }, 500);
 });
 
 // Clean up interval on page unload
