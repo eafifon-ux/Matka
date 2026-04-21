@@ -8,7 +8,7 @@ const app = express();
 // MIDDLEWARE - FIXED CORS!
 // ===============================
 app.use(cors({
-  origin: '*', // Allow all origins (or specify: 'https://eafifon-ux.github.io')
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -31,7 +31,7 @@ app.get('/messages', (req, res) => {
   res.json(messages);
 });
 
-// Send a message
+// Send a message - 🚨 FIXED VERSION 🚨
 app.post('/messages', (req, res) => {
   console.log('POST /messages - body:', req.body);
   
@@ -51,10 +51,8 @@ app.post('/messages', (req, res) => {
   messages.push(newMessage);
   console.log('Added message. Total:', messages.length);
   
-  res.json({
-    success: true,
-    message: newMessage
-  });
+  // 🚨 CRITICAL FIX: Return ALL messages (not just success object)
+  res.json(messages);  // ← This is the fix!
 });
 
 // Serve static files (optional)
