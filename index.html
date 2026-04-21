@@ -688,7 +688,7 @@ function setUsername() {
   loadMessages();
   
   if (messageInterval) clearInterval(messageInterval);
-  messageInterval = setInterval(loadMessages, 2000);
+  messageInterval = setInterval(loadMessages, 500);
 }
 
 /* ===============================
@@ -888,6 +888,8 @@ async function sendMessage() {
       const errorText = await response.text();
       throw new Error(`Failed to send: ${response.status} ${errorText}`);
     }
+    
+    await loadMessages();
     
     const messages = await response.json();
     console.log("Send successful, got", messages.length, "messages");
