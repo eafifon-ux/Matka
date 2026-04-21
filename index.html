@@ -293,6 +293,30 @@ h1 {
   background: #e8f5e8;
   color: #4CAF50;
 }
+
+.server-config {
+  text-align: center;
+  margin-bottom: 15px;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.server-config input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  width: 300px;
+  margin: 0 10px;
+}
+
+.server-config button {
+  padding: 8px 15px;
+  background: #666;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
 </style>
 </head>
 
@@ -309,6 +333,13 @@ h1 {
   <button data-mode="DOS">DOS</button>
   <button data-mode="DOM">DOM</button>
   <button id="heptad-btn">Heptad</button>
+</div>
+
+<!-- SERVER CONFIGURATION -->
+<div class="server-config">
+  <label for="server-input">Server URL:</label>
+  <input type="text" id="server-input" value="https://matka-3.onrender.com" />
+  <button onclick="updateServer()">Update</button>
 </div>
 
 <div id="user-setup">
@@ -351,13 +382,11 @@ h1 {
 
 <script>
 /* ===============================
-   CONFIGURATION
+   CONFIGURATION - FIXED!
 =============================== */
 
-// Auto-detect if we're on Render
-let SERVER = window.location.origin === 'file://' || window.location.hostname === 'localhost' 
-  ? 'http://localhost:3000' 
-  : window.location.origin;
+// Your Render server URL
+let SERVER = "https://matka-3.onrender.com";
 
 console.log("Using server:", SERVER);
 
@@ -456,7 +485,6 @@ let heptad = false;
 let currentMessages = [];
 let messageInterval = null;
 let currentUser = '';
-let pendingMessages = new Map(); // Track pending messages by ID
 
 GPC.initHeptads();
 
@@ -495,6 +523,29 @@ function updateTopBar() {
   const days = GPC.daysFromGregorian(new Date());
   const gpcDate = GPC.gpcFromDays(days);
   document.getElementById("gpc-display").textContent = formatGPC(gpcDate);
+}
+
+/* ===============================
+   SERVER CONFIG
+=============================== */
+
+function updateServer() {
+  const input = document.getElementById('server-input');
+  const newServer = input.value.trim();
+  
+  if (!newServer) {
+    showConnectionError('Please enter a server URL');
+    return;
+  }
+  
+  SERVER = newServer;
+  document.getElementById('server-status').textContent = SERVER;
+  showConnectionSuccess(`Server updated to: ${SERVER}`);
+  
+  // Reload messages if we're already logged in
+  if (currentUser) {
+    loadMessages();
+  }
 }
 
 /* ===============================
@@ -567,7 +618,7 @@ function showConnectionSuccess(message) {
 }
 
 /* ===============================
-   MESSAGE FUNCTIONS
+   MESSAGE FUNCTIONS - SIMPLIFIED!
 =============================== */
 
 function escapeHtml(text) {
@@ -580,55 +631,46 @@ async function loadMessages() {
   try {
     updateStatus('connecting');
     
-    // Try to reach server
+    console.log(`Fetching from: ${SERVER}/messages`);
+    
     const response = await fetch(`${SERVER}/messages`, {
-      cache: "no-store",
-      headers: { 'Accept': 'application/json' }
+      cache: "no-store"
     });
     
+    console.log(`Response status: ${response.status}`);
+    
     if (!response.ok) {
-      throw new Error(`Server responded with ${response.status}`);
+      throw new Error(`Server error: ${response.status}`);
     }
     
-    const data = await response.json();
-    
-    // Handle different response formats
-    let messages = [];
-    if (Array.isArray(data)) {
-      messages = data;
-    } else if (data && data.success && data.message) {
-      // Handle single message response
-      messages = [data.message];
-    } else if (data && data.messages) {
-      messages = data.messages;
-    }
-    
-    // Merge pending messages
-    const allMessages = [...messages];
-    for (const [id, pending] of pendingMessages.entries()) {
-      if (!messages.some(m => m.id === id)) {
-        allMessages.push(pending);
-      }
-    }
+    const messages = await response.json();
+    console.log(`Received ${messages.length} messages:`, messages);
     
     // Update if changed
-    if (JSON.stringify(allMessages) !== JSON.stringify(currentMessages)) {
-      currentMessages = allMessages;
-      renderMessages(allMessages);
+    if (JSON.stringify(messages) !== JSON.stringify(currentMessages)) {
+      currentMessages = messages;
+      renderMessages(messages);
       updateStatus('connected');
       
-      // Update message count (excluding pending)
-      const confirmedCount = messages.length;
+      // Update message count
       document.getElementById('message-count').textContent = 
-        ` • ${confirmedCount} message${confirmedCount !== 1 ? 's' : ''}`;
+        ` • ${messages.length} message${messages.length !== 1 ? 's' : ''}`;
     }
     
   } catch (error) {
     console.error("Failed to load messages:", error);
     updateStatus('disconnected');
     
-    // Still render what we have
-    renderMessages(currentMessages);
+    const container = document.getElementById("messages");
+    if (container && currentMessages.length === 0) {
+      container.innerHTML = `
+        <div class="message system error">
+          <div class="text">Cannot connect to server at ${SERVER}</div>
+          <div class="text">Error: ${error.message}</div>
+          <div class="text">Make sure your Render server is running!</div>
+        </div>
+      `;
+    }
   }
 }
 
@@ -644,29 +686,18 @@ function renderMessages(messages) {
   
   emptyState.style.display = 'none';
   
-  // Sort by timestamp
-  const sortedMessages = [...messages].sort((a, b) => {
-    const timeA = new Date(a.timestamp || a.time || Date.now());
-    const timeB = new Date(b.timestamp || b.time || Date.now());
-    return timeA - timeB;
-  });
-  
-  container.innerHTML = sortedMessages.map(msg => {
-    const date = new Date(msg.timestamp || msg.time || Date.now());
+  container.innerHTML = messages.map(msg => {
+    const date = new Date(msg.timestamp || Date.now());
     const days = GPC.daysFromGregorian(date);
     const gpcDate = GPC.gpcFromDays(days);
     const gpcFormatted = formatGPC(gpcDate);
     
     const isMine = msg.from === currentUser;
     const isSystem = msg.from === 'system';
-    const isPending = msg.pending || pendingMessages.has(msg.id);
-    const isError = msg.error;
     
     let className = 'message';
     if (isMine) className += ' mine';
     if (isSystem) className += ' system';
-    if (isPending) className += ' pending';
-    if (isError) className += ' error';
     
     const sender = isSystem ? 'System' : (msg.from || 'Unknown');
     const text = msg.text || '';
@@ -699,22 +730,22 @@ async function sendMessage() {
   // Clear input
   input.value = '';
   
-  // Create pending message
-  const tempId = Date.now();
-  const pendingMessage = {
-    id: tempId,
+  // Create temporary message for instant feedback
+  const tempMessage = {
+    id: Date.now(),
     from: currentUser,
     text: text,
     timestamp: new Date().toISOString(),
     pending: true
   };
   
-  pendingMessages.set(tempId, pendingMessage);
-  currentMessages.push(pendingMessage);
+  currentMessages.push(tempMessage);
   renderMessages(currentMessages);
   
   try {
-    // Send to server
+    console.log(`Sending to: ${SERVER}/messages`);
+    console.log(`Message data:`, { from: currentUser, text: text, to: "all" });
+    
     const response = await fetch(`${SERVER}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -725,67 +756,45 @@ async function sendMessage() {
       })
     });
     
+    console.log(`Send response status: ${response.status}`);
+    
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `Failed to send: ${response.status}`);
+      throw new Error(`Failed to send: ${response.status}`);
     }
     
     const result = await response.json();
-    
-    // Remove pending status
-    pendingMessages.delete(tempId);
-    
-    // Update with server response
-    const index = currentMessages.findIndex(m => m.id === tempId);
-    if (index > -1) {
-      if (result.success && result.message) {
-        currentMessages[index] = result.message;
-      } else {
-        currentMessages[index].pending = false;
-      }
-    }
+    console.log("Send result:", result);
     
     showConnectionSuccess('Message sent!');
+    
+    // Reload messages to get the confirmed one from server
+    await loadMessages();
     
   } catch (error) {
     console.error("Failed to send message:", error);
     
     // Mark as error
-    const index = currentMessages.findIndex(m => m.id === tempId);
+    const index = currentMessages.findIndex(m => m.id === tempMessage.id);
     if (index > -1) {
       currentMessages[index].error = true;
-      currentMessages[index].text = `${text} (Failed: ${error.message})`;
-      pendingMessages.delete(tempId);
     }
     
+    renderMessages(currentMessages);
     showConnectionError(`Failed to send: ${error.message}`);
   }
-  
-  // Reload to get latest from server
-  await loadMessages();
   
   // Keep focus
   input.focus();
 }
 
 /* ===============================
-   CONTROLS AND INITIALIZATION
+   INITIALIZATION
 =============================== */
-
-function handleEnterKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    if (document.getElementById('user-setup').style.display !== 'none') {
-      setUsername();
-    } else {
-      sendMessage();
-    }
-  }
-}
 
 document.addEventListener("DOMContentLoaded", () => {
   // Update server display
   document.getElementById('server-status').textContent = SERVER;
+  document.getElementById('server-input').value = SERVER;
   
   // Set up control buttons
   document.querySelectorAll("[data-mode]").forEach(btn => {
@@ -811,24 +820,43 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Enter key handlers
-  document.getElementById("username-input").addEventListener("keypress", handleEnterKey);
-  document.getElementById("message-input").addEventListener("keypress", handleEnterKey);
+  document.getElementById("username-input").addEventListener("keypress", (e) => {
+    if (e.key === 'Enter') setUsername();
+  });
   
-  // Set up send button
-  document.getElementById("send-btn").addEventListener("click", sendMessage);
+  document.getElementById("message-input").addEventListener("keypress", (e) => {
+    if (e.key === 'Enter') sendMessage();
+  });
+  
+  // Server input enter key
+  document.getElementById("server-input").addEventListener("keypress", (e) => {
+    if (e.key === 'Enter') updateServer();
+  });
   
   // Initial load
   updateTopBar();
   setInterval(updateTopBar, 10000);
   
-  // Focus and test connection
+  // Focus
   document.getElementById("username-input").focus();
   
   // Test server connection immediately
   setTimeout(() => {
+    console.log("Testing server connection...");
     fetch(`${SERVER}/`)
-      .then(() => showConnectionSuccess('Connected to server!'))
-      .catch(() => showConnectionError('Cannot reach server. Is it running?'));
+      .then(response => {
+        if (response.ok) {
+          showConnectionSuccess('Connected to server!');
+          updateStatus('connected');
+        } else {
+          showConnectionError(`Server error: ${response.status}`);
+          updateStatus('disconnected');
+        }
+      })
+      .catch(error => {
+        showConnectionError(`Cannot reach server: ${error.message}`);
+        updateStatus('disconnected');
+      });
   }, 1000);
 });
 
