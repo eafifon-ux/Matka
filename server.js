@@ -1,8 +1,18 @@
-const express = require('express');
-const cors = require('cors');
+const express = require("express");
+const cors = require("cors");
+require("dotenv").config();
 
 const app = express();
-app.use(cors());
+
+// ===============================
+// MIDDLEWARE - FIXED CORS!
+// ===============================
+app.use(cors({
+  origin: '*', // Allow all origins (or specify: 'https://eafifon-ux.github.io')
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 // Store messages in memory
@@ -47,7 +57,7 @@ app.post('/messages', (req, res) => {
   });
 });
 
-// Serve static files (for your HTML)
+// Serve static files (optional)
 app.use(express.static('public'));
 
 // Health check
@@ -61,35 +71,18 @@ app.get('/health', (req, res) => {
 
 // Root route
 app.get('/', (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Matka Server</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        h1 { color: #1e6cff; }
-        .endpoint { background: #f5f7fb; padding: 10px; border-radius: 5px; margin: 10px 0; }
-      </style>
-    </head>
-    <body>
-      <h1>✅ Matka Server is Running!</h1>
-      <p>Your chat server is ready to use.</p>
-      <div class="endpoint">
-        <strong>Endpoints:</strong>
-        <ul>
-          <li><code>GET /messages</code> - Get all messages</li>
-          <li><code>POST /messages</code> - Send a message</li>
-          <li><code>GET /health</code> - Health check</li>
-        </ul>
-      </div>
-      <p>Go to <a href="/index.html">/index.html</a> for the chat interface.</p>
-    </body>
-    </html>
-  `);
+  res.json({
+    service: 'Matka Messaging Server',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      messages: '/messages',
+      health: '/health'
+    }
+  });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
