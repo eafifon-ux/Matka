@@ -28,7 +28,7 @@
     <!-- MAIN APP -->
     <div id="main-app" style="display:none;">
 
-      <!-- GPC DISPLAY (IMPORTANT) -->
+      <!-- GPC DISPLAY (IMPORTANT - DO NOT REMOVE) -->
       <div id="gpc-display"></div>
 
       <!-- CONTROLS -->
@@ -61,15 +61,15 @@
   </div>
 
   <!-- ========================= -->
-  <!-- 1. GPC ENGINE (LOAD FIRST) -->
+  <!-- GPC ENGINE (LOAD FIRST) -->
   <!-- ========================= -->
   <script src="game.js"></script>
 
   <!-- ========================= -->
-  <!-- 2. EMAIL SYSTEM (ISOLATED) -->
+  <!-- EMAIL SYSTEM -->
   <!-- ========================= -->
   <script>
-    let emailRetry = 2000;
+    let retryDelay = 2000;
 
     async function loadEmails() {
       try {
@@ -85,23 +85,25 @@
           <div style="border:1px solid #ccc; margin:10px; padding:10px;">
             <b>${e.subject}</b><br/>
             <small>From: ${e.from}</small><br/>
+            <small style="color:gray;">
+              ${e.date ? new Date(e.date).toLocaleString() : ""}
+            </small><br/>
             <p>${e.body}</p>
           </div>
         `).join("");
 
-        emailRetry = 2000;
+        retryDelay = 2000;
 
       } catch (err) {
         console.log("Email fetch retry...", err);
 
-        emailRetry = Math.min(emailRetry * 1.5, 10000);
+        retryDelay = Math.min(retryDelay * 1.5, 10000);
 
-        setTimeout(loadEmails, emailRetry);
+        setTimeout(loadEmails, retryDelay);
         return;
       }
     }
 
-    // SAFE START (DO NOT BLOCK GPC)
     window.addEventListener("load", () => {
       loadEmails();
       setInterval(loadEmails, 5000);
