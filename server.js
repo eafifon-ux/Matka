@@ -12,6 +12,15 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// 🔥 DEBUG: show every request hitting server
+app.use((req, res, next) => {
+  console.log("➡️", req.method, req.path);
+  if (req.method === "POST") {
+    console.log("BODY:", req.body);
+  }
+  next();
+});
+
 // ===============================
 // CONFIG
 // ===============================
@@ -25,7 +34,7 @@ if (!EMAIL || !PASSWORD) {
 }
 
 // ===============================
-// INBOX (REAL DATA ONLY)
+// INBOX
 // ===============================
 let emails = [];
 
@@ -41,7 +50,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // ===============================
-// HEALTH
+// HEALTH CHECK
 // ===============================
 app.get("/", (req, res) => {
   res.send("Matka Mail Server Running");
@@ -52,6 +61,21 @@ app.get("/", (req, res) => {
 // ===============================
 app.get("/emails", (req, res) => {
   res.json(emails);
+});
+
+// ===============================
+// TEST ROUTE (IMPORTANT DEBUG TOOL)
+// ===============================
+app.get("/test-incoming", (req, res) => {
+  emails.unshift({
+    id: Date.now(),
+    subject: "TEST EMAIL WORKS",
+    from: "system",
+    body: "manual test",
+    date: new Date().toISOString()
+  });
+
+  res.send("OK");
 });
 
 // ===============================
@@ -79,29 +103,22 @@ app.post("/send", async (req, res) => {
 });
 
 // ===============================
-// 🔥 INCOMING EMAIL (FROM CLOUDFLARE WORKER)
+// INCOMING EMAIL (FROM CLOUDFLARE WORKER)
 // ===============================
 app.post("/incoming-email", (req, res) => {
-  const sender = req.body.sender || req.body.from;
-  const subject = req.body.subject || "(no subject)";
-  const body =
-    req.body["body-plain"] ||
-    req.body.text ||
-    "";
-
   const email = {
     id: Date.now(),
-    subject,
-    from: sender,
-    date: new Date().toISOString(),
-    body
+    subject: req.body.subject || "(no subject)",
+    from: req.body.from || req.body.sender || "unknown",
+    body: req.body.body || req.body.text || "",
+    date: new Date().toISOString()
   };
 
   emails.unshift(email);
 
-  console.log("📩 RECEIVED:", subject);
+  console.log("📩 RECEIVED EMAIL:", email);
 
-  res.status(200).send("OK");
+  res.status(200).json({ ok: true });
 });
 
 // ===============================
