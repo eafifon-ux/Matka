@@ -1,41 +1,75 @@
 const express = require("express");
 const cors = require("cors");
+const Imap = require("imap-simple");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   TEMP IN-MEMORY EMAIL STORE
+   GMAIL IMAP CONFIG
+   (YOU MUST SET ENV VARS)
 =============================== */
 
-let emails = [
-  {
-    id: 1,
-    subject: "Welcome to Matka Mail",
-    from: "system@matka.local",
-    date: new Date().toISOString(),
-    body: "Your email system is now working."
-  },
-  {
-    id: 2,
-    subject: "Test Email",
-    from: "demo@matka.local",
-    date: new Date(Date.now() - 3600 * 1000).toISOString(),
-    body: "This is a second test message."
+const imapConfig = {
+  imap: {
+    user: process.env.EMAIL_USER,
+    password: process.env.EMAIL_PASS, // Gmail App Password
+    host: "imap.gmail.com",
+    port: 993,
+    tls: true,
+    authTimeout: 10000
   }
-];
+};
 
 /* ===============================
-   ROUTES
+   GET REAL EMAILS
 =============================== */
 
-// GET emails
-app.get("/emails", (req, res) => {
-  res.json(emails);
+app.get("/emails", async (req, res) => {
+  try {
+    const connection = await Imap.connect(imapConfig);
+
+    await connection.openBox("INBOX");
+
+    const searchCriteria = ["ALL"];
+    const fetchOptions = {
+      bodies: ["HEADER.FIELDS (FROM TO SUBJECT DATE)", "TEXT"],
+      struct: true
+    };
+
+    const messages = await connection.search(searchCriteria, fetchOptions);
+
+    const emails = messages.slice(-20).map(msg => {
+      const headerPart = msg.parts.find(p =>
+        p.which.includes("HEADER.FIELDS")
+      );
+
+      const headers = headerPart?.body || {};
+
+      return {
+        subject: headers.subject?.[0] || "No subject",
+        from: headers.from?.[0] || "unknown",
+        date: headers.date?.[0] || new Date().toISOString(),
+        body: ""
+      };
+    });
+
+    connection.end();
+
+    res.json(emails.reverse());
+  } catch (err) {
+    console.error("IMAP ERROR:", err.message);
+    res.json([]); // frontend fallback will show
+  }
 });
 
-// ADD test email (for debugging)
+/* ===============================
+   KEEP YOUR TEST SYSTEM (optional)
+=============================== */
+
+let emails = [];
+
 app.post("/emails", (req, res) => {
   const { subject, from, body } = req.body;
 
@@ -52,13 +86,16 @@ app.post("/emails", (req, res) => {
   res.json({ success: true, email: newEmail });
 });
 
-// health check
+/* ===============================
+   HEALTH CHECK
+=============================== */
+
 app.get("/", (req, res) => {
   res.send("Matka Mail server running");
 });
 
 /* ===============================
-   START SERVER
+   START
 =============================== */
 
 const PORT = process.env.PORT || 3000;
