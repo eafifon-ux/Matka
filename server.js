@@ -1,20 +1,39 @@
 const express = require("express");
 const cors = require("cors");
 const Imap = require("imap-simple");
+const nodemailer = require("nodemailer");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   GMAIL IMAP CONFIG
-   (YOU MUST SET ENV VARS)
+   ENV CONFIG
+=============================== */
+
+const EMAIL_USER = process.env.EMAIL_USER;
+const EMAIL_PASS = process.env.EMAIL_PASS;
+
+/* ===============================
+   SMTP TRANSPORT (SEND EMAIL)
+=============================== */
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: EMAIL_USER,
+    pass: EMAIL_PASS
+  }
+});
+
+/* ===============================
+   READ EMAILS (IMAP)
 =============================== */
 
 const imapConfig = {
   imap: {
-    user: process.env.EMAIL_USER,
-    password: process.env.EMAIL_PASS, // Gmail App Password
+    user: EMAIL_USER,
+    password: EMAIL_PASS,
     host: "imap.gmail.com",
     port: 993,
     tls: true,
@@ -22,35 +41,26 @@ const imapConfig = {
   }
 };
 
-/* ===============================
-   GET REAL EMAILS
-=============================== */
-
 app.get("/emails", async (req, res) => {
   try {
     const connection = await Imap.connect(imapConfig);
 
     await connection.openBox("INBOX");
 
-    const searchCriteria = ["ALL"];
-    const fetchOptions = {
-      bodies: ["HEADER.FIELDS (FROM TO SUBJECT DATE)", "TEXT"],
+    const messages = await connection.search(["ALL"], {
+      bodies: ["HEADER.FIELDS (FROM SUBJECT DATE)", "TEXT"],
       struct: true
-    };
+    });
 
-    const messages = await connection.search(searchCriteria, fetchOptions);
-
-    const emails = messages.slice(-20).map(msg => {
-      const headerPart = msg.parts.find(p =>
+    const emails = messages.slice(-30).map(msg => {
+      const header = msg.parts.find(p =>
         p.which.includes("HEADER.FIELDS")
-      );
-
-      const headers = headerPart?.body || {};
+      )?.body || {};
 
       return {
-        subject: headers.subject?.[0] || "No subject",
-        from: headers.from?.[0] || "unknown",
-        date: headers.date?.[0] || new Date().toISOString(),
+        subject: header.subject?.[0] || "No subject",
+        from: header.from?.[0] || "unknown",
+        date: header.date?.[0] || new Date().toISOString(),
         body: ""
       };
     });
@@ -60,38 +70,42 @@ app.get("/emails", async (req, res) => {
     res.json(emails.reverse());
   } catch (err) {
     console.error("IMAP ERROR:", err.message);
-    res.json([]); // frontend fallback will show
+    res.json([]);
   }
 });
 
 /* ===============================
-   KEEP YOUR TEST SYSTEM (optional)
+   SEND EMAIL (SMTP)
 =============================== */
 
-let emails = [];
+app.post("/send", async (req, res) => {
+  const { to, subject, body } = req.body;
 
-app.post("/emails", (req, res) => {
-  const { subject, from, body } = req.body;
+  if (!to || !subject || !body) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
 
-  const newEmail = {
-    id: emails.length + 1,
-    subject: subject || "No subject",
-    from: from || "unknown",
-    body: body || "",
-    date: new Date().toISOString()
-  };
+  try {
+    await transporter.sendMail({
+      from: EMAIL_USER,
+      to,
+      subject,
+      text: body
+    });
 
-  emails.unshift(newEmail);
-
-  res.json({ success: true, email: newEmail });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("SMTP ERROR:", err.message);
+    res.status(500).json({ error: "Send failed" });
+  }
 });
 
 /* ===============================
-   HEALTH CHECK
+   HEALTH
 =============================== */
 
 app.get("/", (req, res) => {
-  res.send("Matka Mail server running");
+  res.send("Matka Mail (Read + Send) running");
 });
 
 /* ===============================
@@ -100,5 +114,5 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+  console.log("Server running on", PORT);
 });
