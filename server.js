@@ -1,60 +1,118 @@
+const express = require("express");
+const cors = require("cors");
+const Imap = require("imap-simple");
+const nodemailer = require("nodemailer");
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+/* ===============================
+   ENV CONFIG
+=============================== */
+
+const EMAIL_USER = process.env.EMAIL_USER;
+const EMAIL_PASS = process.env.EMAIL_PASS;
+
+/* ===============================
+   SMTP TRANSPORT (SEND EMAIL)
+=============================== */
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: EMAIL_USER,
+    pass: EMAIL_PASS
+  }
+});
+
+/* ===============================
+   READ EMAILS (IMAP)
+=============================== */
+
+const imapConfig = {
+  imap: {
+    user: EMAIL_USER,
+    password: EMAIL_PASS,
+    host: "imap.gmail.com",
+    port: 993,
+    tls: true,
+    authTimeout: 10000
+  }
+};
+
 app.get("/emails", async (req, res) => {
-  console.log("\n==============================");
-  console.log("📡 EMAIL REQUEST STARTED");
-  console.log("==============================");
-
   try {
-    console.log("📶 Connecting to IMAP...");
-    console.log("User:", EMAIL_USER ? "SET" : "MISSING");
-    console.log("Pass:", EMAIL_PASS ? "SET" : "MISSING");
-
     const connection = await Imap.connect(imapConfig);
-
-    console.log("✅ IMAP connected");
-
+    
     await connection.openBox("INBOX");
-    console.log("📥 INBOX opened");
-
+    
     const messages = await connection.search(["ALL"], {
-      bodies: ["HEADER.FIELDS (FROM SUBJECT DATE)"],
+      bodies: ["HEADER.FIELDS (FROM SUBJECT DATE)", "TEXT"],
       struct: true
     });
-
-    console.log("📨 Messages found:", messages.length);
-
-    const emails = messages.slice(-20).map((msg, i) => {
-      const headerPart = msg.parts.find(p =>
+    
+    const emails = messages.slice(-30).map(msg => {
+      const header = msg.parts.find(p =>
         p.which.includes("HEADER.FIELDS")
-      );
-
-      const header = headerPart?.body || {};
-
-      console.log(`➡️ Parsing email ${i + 1}`);
-
+      )?.body || {};
+      
       return {
         subject: header.subject?.[0] || "No subject",
         from: header.from?.[0] || "unknown",
-        date: header.date?.[0] || new Date().toISOString()
+        date: header.date?.[0] || new Date().toISOString(),
+        body: ""
       };
     });
-
+    
     connection.end();
-
-    console.log("✅ IMAP connection closed");
-    console.log("📦 Sending emails:", emails.length);
-
-    return res.json(emails.reverse());
-
+    
+    res.json(emails.reverse());
   } catch (err) {
-    console.error("\n🔥🔥 IMAP FULL ERROR 🔥🔥");
-    console.error("Message:", err.message);
-    console.error("Code:", err.code);
-    console.error("Full error:", err);
-
-    return res.status(500).json({
-      error: err.message,
-      code: err.code || "UNKNOWN",
-      hint: "Check Gmail App Password + IMAP access"
-    });
+    console.error("IMAP ERROR:", err.message);
+    res.json([]);
   }
+});
+
+/* ===============================
+   SEND EMAIL (SMTP)
+=============================== */
+
+app.post("/send", async (req, res) => {
+  const { to, subject, body } = req.body;
+  
+  if (!to || !subject || !body) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+  
+  try {
+    await transporter.sendMail({
+      from: EMAIL_USER,
+      to,
+      subject,
+      text: body
+    });
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error("SMTP ERROR:", err.message);
+    res.status(500).json({ error: "Send failed" });
+  }
+});
+
+/* ===============================
+   HEALTH
+=============================== */
+
+app.get("/", (req, res) => {
+  res.send("Matka Mail (Read + Send) running");
+});
+
+/* ===============================
+   START
+=============================== */
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Server running on", PORT);
 });
