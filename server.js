@@ -1,118 +1,96 @@
 const express = require("express");
 const cors = require("cors");
-const Imap = require("imap-simple");
-const nodemailer = require("nodemailer");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   ENV CONFIG
+   MATKA MESSAGE STORE (IN MEMORY)
+   (later we upgrade to DB)
 =============================== */
 
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASS;
+let messages = [
+  {
+    id: 1,
+    from: "system",
+    to: "all",
+    text: "Matka Messaging is live.",
+    timestamp: new Date().toISOString()
+  }
+];
 
 /* ===============================
-   SMTP TRANSPORT (SEND EMAIL)
+   GET MESSAGES
 =============================== */
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS
+app.get("/messages", (req, res) => {
+  const { user } = req.query;
+
+  // optional filtering later
+  if (user) {
+    return res.json(
+      messages.filter(
+        m => m.to === user || m.to === "all" || m.from === user
+      )
+    );
   }
+
+  res.json(messages);
 });
 
 /* ===============================
-   READ EMAILS (IMAP)
+   SEND MESSAGE
 =============================== */
 
-const imapConfig = {
-  imap: {
-    user: EMAIL_USER,
-    password: EMAIL_PASS,
-    host: "imap.gmail.com",
-    port: 993,
-    tls: true,
-    authTimeout: 10000
-  }
-};
+app.post("/messages", (req, res) => {
+  const { from, to, text } = req.body;
 
-app.get("/emails", async (req, res) => {
-  try {
-    const connection = await Imap.connect(imapConfig);
-    
-    await connection.openBox("INBOX");
-    
-    const messages = await connection.search(["ALL"], {
-      bodies: ["HEADER.FIELDS (FROM SUBJECT DATE)", "TEXT"],
-      struct: true
+  if (!from || !text) {
+    return res.status(400).json({
+      error: "from and text are required"
     });
-    
-    const emails = messages.slice(-30).map(msg => {
-      const header = msg.parts.find(p =>
-        p.which.includes("HEADER.FIELDS")
-      )?.body || {};
-      
-      return {
-        subject: header.subject?.[0] || "No subject",
-        from: header.from?.[0] || "unknown",
-        date: header.date?.[0] || new Date().toISOString(),
-        body: ""
-      };
-    });
-    
-    connection.end();
-    
-    res.json(emails.reverse());
-  } catch (err) {
-    console.error("IMAP ERROR:", err.message);
-    res.json([]);
   }
+
+  const newMessage = {
+    id: messages.length + 1,
+    from,
+    to: to || "all",
+    text,
+    timestamp: new Date().toISOString()
+  };
+
+  messages.push(newMessage);
+
+  res.json({
+    success: true,
+    message: newMessage
+  });
 });
 
 /* ===============================
-   SEND EMAIL (SMTP)
+   DELETE (optional debug tool)
 =============================== */
 
-app.post("/send", async (req, res) => {
-  const { to, subject, body } = req.body;
-  
-  if (!to || !subject || !body) {
-    return res.status(400).json({ error: "Missing fields" });
-  }
-  
-  try {
-    await transporter.sendMail({
-      from: EMAIL_USER,
-      to,
-      subject,
-      text: body
-    });
-    
-    res.json({ success: true });
-  } catch (err) {
-    console.error("SMTP ERROR:", err.message);
-    res.status(500).json({ error: "Send failed" });
-  }
+app.delete("/messages", (req, res) => {
+  messages = [];
+  res.json({ success: true, cleared: true });
 });
 
 /* ===============================
-   HEALTH
+   HEALTH CHECK
 =============================== */
 
 app.get("/", (req, res) => {
-  res.send("Matka Mail (Read + Send) running");
+  res.send("Matka Messaging Server running");
 });
 
 /* ===============================
-   START
+   START SERVER
 =============================== */
 
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log("Server running on", PORT);
+  console.log("🚀 Matka Messaging running on port", PORT);
 });
