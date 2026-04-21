@@ -168,11 +168,17 @@ h1 {
 
 .message.pending {
   opacity: 0.7;
+  background: #fff8e1;
+  border-left-color: #ffb74d;
 }
 
 .message.error {
   background: #ffe6e6;
   border-left-color: #ff4444;
+}
+
+.message.sent {
+  opacity: 1;
 }
 
 .message .text {
@@ -317,6 +323,110 @@ h1 {
   border-radius: 4px;
   cursor: pointer;
 }
+
+.refresh-btn {
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8em;
+  margin-left: 10px;
+}
+
+.refresh-btn:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.debug-btn {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  padding: 5px 10px;
+  background: #666;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8em;
+  cursor: pointer;
+  z-index: 1000;
+}
+
+.debug-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  display: none;
+}
+
+.debug-content {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  max-width: 90%;
+  max-height: 80%;
+  overflow: auto;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.debug-content h3 {
+  margin-top: 0;
+  color: #1e6cff;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.debug-text {
+  background: #f8f9ff;
+  padding: 15px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 0.9em;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 15px 0;
+  white-space: pre-wrap;
+}
+
+.debug-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.debug-buttons button {
+  padding: 8px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.copy-btn {
+  background: #1e6cff;
+  color: white;
+}
+
+.copy-btn:hover {
+  background: #0a5ae0;
+}
+
+.close-btn {
+  background: #666;
+  color: white;
+}
+
+.close-btn:hover {
+  background: #555;
+}
 </style>
 </head>
 
@@ -359,7 +469,10 @@ h1 {
 <div id="chat-container">
   <div id="chat-header">
     <h3>Matka Messaging</h3>
-    <div>You: <span id="user-display"></span></div>
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div>You: <span id="user-display"></span></div>
+      <button class="refresh-btn" onclick="forceRefresh()" title="Refresh messages">↻</button>
+    </div>
   </div>
   
   <div id="messages">
@@ -380,20 +493,30 @@ h1 {
   <span id="message-count"> • 0 messages</span>
 </div>
 
+<button class="debug-btn" onclick="debugServerResponse()">Debug</button>
+
+<!-- DEBUG MODAL -->
+<div id="debug-modal" class="debug-modal">
+  <div class="debug-content">
+    <h3>Server Debug Info</h3>
+    <div id="debug-text" class="debug-text"></div>
+    <div class="debug-buttons">
+      <button class="copy-btn" onclick="copyDebugInfo()">Copy to Clipboard</button>
+      <button class="close-btn" onclick="closeDebugModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ===============================
-   CONFIGURATION - UPDATED!
+   CONFIGURATION
 =============================== */
-
-// Your Render server URL - UPDATED!
 let SERVER = "https://matka-3-rhk1.onrender.com";
-
 console.log("Using server:", SERVER);
 
 /* ===============================
    GPC ENGINE
 =============================== */
-
 const GPC = {
   epochUTC: Date.UTC(1982, 2, 24),
   epochYear: 5979,
@@ -479,10 +602,10 @@ const GPC = {
 /* ===============================
    APPLICATION STATE
 =============================== */
-
 let mode = "DOY";
 let heptad = false;
 let currentMessages = [];
+let pendingMessages = new Map(); // Track messages being sent
 let messageInterval = null;
 let currentUser = '';
 
@@ -491,7 +614,6 @@ GPC.initHeptads();
 /* ===============================
    FORMATTER
 =============================== */
-
 function formatGPC(gpcDate) {
   const { year, doy } = gpcDate;
   const emoji = GPC.weekEmojis[(doy - 1) % 7];
@@ -528,7 +650,6 @@ function updateTopBar() {
 /* ===============================
    SERVER CONFIG
 =============================== */
-
 function updateServer() {
   const input = document.getElementById('server-input');
   const newServer = input.value.trim();
@@ -542,7 +663,6 @@ function updateServer() {
   document.getElementById('server-status').textContent = SERVER;
   showConnectionSuccess(`Server updated to: ${SERVER}`);
   
-  // Reload messages if we're already logged in
   if (currentUser) {
     loadMessages();
   }
@@ -551,7 +671,6 @@ function updateServer() {
 /* ===============================
    USER SETUP
 =============================== */
-
 function setUsername() {
   const input = document.getElementById('username-input');
   const username = input.value.trim();
@@ -566,23 +685,19 @@ function setUsername() {
   document.getElementById('user-setup').style.display = 'none';
   document.getElementById('chat-container').style.display = 'block';
   
-  // Enable chat input
   document.getElementById('message-input').disabled = false;
   document.getElementById('send-btn').disabled = false;
   document.getElementById('message-input').focus();
   
-  // Start loading messages
   loadMessages();
   
-  // Start auto-refresh
   if (messageInterval) clearInterval(messageInterval);
   messageInterval = setInterval(loadMessages, 2000);
 }
 
 /* ===============================
-   CONNECTION MANAGEMENT - FIXED!
+   CONNECTION MANAGEMENT
 =============================== */
-
 function updateStatus(status) {
   const indicator = document.getElementById('status-indicator');
   if (indicator) {
@@ -634,13 +749,17 @@ function showConnectionSuccess(message) {
 }
 
 /* ===============================
-   MESSAGE FUNCTIONS - IMPROVED!
+   MESSAGE FUNCTIONS - FIXED FOR REAL-TIME!
 =============================== */
-
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+function forceRefresh() {
+  console.log("Manual refresh triggered");
+  loadMessages();
 }
 
 async function loadMessages() {
@@ -649,7 +768,7 @@ async function loadMessages() {
     
     console.log(`Fetching from: ${SERVER}/messages`);
     
-    const response = await fetch(`${SERVER}/messages`, {
+    const response = await fetch(`${SERVER}/messages?_=${Date.now()}`, {
       cache: "no-store",
       headers: {
         'Accept': 'application/json',
@@ -664,20 +783,18 @@ async function loadMessages() {
     }
     
     const messages = await response.json();
-    console.log(`Received ${messages.length} messages:`, messages);
+    console.log(`Received ${messages.length} messages`);
     
-    // Update if changed
-    if (JSON.stringify(messages) !== JSON.stringify(currentMessages)) {
-      currentMessages = messages;
-      renderMessages(messages);
-      updateStatus('connected');
-      
-      // Update message count
-      const count = messages.length;
-      const messageCountEl = document.getElementById('message-count');
-      if (messageCountEl) {
-        messageCountEl.textContent = ` • ${count} message${count !== 1 ? 's' : ''}`;
-      }
+    // Merge with pending messages
+    const allMessages = mergeMessages(messages);
+    currentMessages = allMessages;
+    renderMessages(allMessages);
+    updateStatus('connected');
+    
+    const count = allMessages.length;
+    const messageCountEl = document.getElementById('message-count');
+    if (messageCountEl) {
+      messageCountEl.textContent = ` • ${count} message${count !== 1 ? 's' : ''}`;
     }
     
   } catch (error) {
@@ -697,6 +814,29 @@ async function loadMessages() {
   }
 }
 
+function mergeMessages(serverMessages) {
+  const merged = [...serverMessages];
+  
+  // Add pending messages that aren't in server yet
+  for (const [tempId, pendingMsg] of pendingMessages.entries()) {
+    if (pendingMsg.status === 'pending') {
+      const exists = merged.some(msg => 
+        msg.tempId === tempId || 
+        (msg.from === pendingMsg.from && msg.text === pendingMsg.text)
+      );
+      if (!exists) {
+        merged.push({...pendingMsg, tempId});
+      }
+    }
+  }
+  
+  return merged.sort((a, b) => {
+    const timeA = new Date(a.timestamp || 0);
+    const timeB = new Date(b.timestamp || 0);
+    return timeA - timeB;
+  });
+}
+
 function renderMessages(messages) {
   const container = document.getElementById("messages");
   const emptyState = document.getElementById("empty-state");
@@ -711,14 +851,7 @@ function renderMessages(messages) {
   
   emptyState.style.display = 'none';
   
-  // Sort by timestamp
-  const sortedMessages = [...messages].sort((a, b) => {
-    const timeA = new Date(a.timestamp || 0);
-    const timeB = new Date(b.timestamp || 0);
-    return timeA - timeB;
-  });
-  
-  container.innerHTML = sortedMessages.map(msg => {
+  container.innerHTML = messages.map(msg => {
     const date = new Date(msg.timestamp || Date.now());
     const days = GPC.daysFromGregorian(date);
     const gpcDate = GPC.gpcFromDays(days);
@@ -726,26 +859,33 @@ function renderMessages(messages) {
     
     const isMine = msg.from === currentUser;
     const isSystem = msg.from === 'system';
+    const isPending = msg.status === 'pending' || msg.tempId;
+    const isFailed = msg.status === 'error';
     
     let className = 'message';
     if (isMine) className += ' mine';
     if (isSystem) className += ' system';
+    if (isPending) className += ' pending';
+    if (isFailed) className += ' error';
     
     const sender = isSystem ? 'System' : (msg.from || 'Unknown');
     const text = msg.text || '';
+    
+    let statusText = '';
+    if (isPending) statusText = ' (Sending...)';
+    if (isFailed) statusText = ' (Failed)';
     
     return `
       <div class="${className}">
         <div class="text">${escapeHtml(text)}</div>
         <div class="meta">
-          <span class="sender">${escapeHtml(sender)}</span>
+          <span class="sender">${escapeHtml(sender)}${statusText}</span>
           <span class="time">${gpcFormatted}</span>
         </div>
       </div>
     `;
   }).join('');
   
-  // Scroll to bottom
   setTimeout(() => {
     if (container) {
       container.scrollTop = container.scrollHeight;
@@ -753,6 +893,9 @@ function renderMessages(messages) {
   }, 10);
 }
 
+/* ===============================
+   SEND MESSAGE - ULTIMATE INSTANT FIX!
+=============================== */
 async function sendMessage() {
   if (!currentUser) {
     showConnectionError('Please enter your name first');
@@ -769,87 +912,210 @@ async function sendMessage() {
     return;
   }
   
-  // Clear input
-  input.value = '';
-  
-  // Create temporary message for instant feedback
+  // Create temporary message with unique ID
+  const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const tempMessage = {
-    id: Date.now(),
+    tempId: tempId,
     from: currentUser,
     text: text,
     timestamp: new Date().toISOString(),
-    pending: true
+    status: 'pending'
   };
   
+  // Add to pending map
+  pendingMessages.set(tempId, {...tempMessage});
+  
+  // INSTANT FEEDBACK: Show message immediately
   currentMessages.push(tempMessage);
   renderMessages(currentMessages);
   
+  // Clear input and refocus
+  input.value = '';
+  input.focus();
+  
+  // Send to server in background
+  sendToServer(tempId, currentUser, text);
+}
+
+async function sendToServer(tempId, from, text) {
   try {
-    console.log(`Sending to: ${SERVER}/messages`);
-    console.log(`Message data:`, { from: currentUser, text: text });
+    console.log(`Sending to server: ${SERVER}/messages`);
     
     const response = await fetch(`${SERVER}/messages`, {
       method: "POST",
       headers: { 
-        "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        from: currentUser,
+        from: from,
         text: text
-        // Remove "to": "all" if your server doesn't expect it
       })
     });
     
-    console.log(`Send response status: ${response.status}`);
+    console.log(`Server response status: ${response.status}`);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Server error response:", errorText);
       throw new Error(`Failed to send: ${response.status} ${errorText}`);
     }
     
     const result = await response.json();
-    console.log("Send result:", result);
+    console.log("Server response:", result);
+    
+    // Update pending message status
+    const pendingMsg = pendingMessages.get(tempId);
+    if (pendingMsg) {
+      pendingMsg.status = 'sent';
+      pendingMessages.set(tempId, pendingMsg);
+    }
     
     showConnectionSuccess('Message sent!');
     
-    // Remove temp message and reload from server
-    currentMessages = currentMessages.filter(m => m.id !== tempMessage.id);
-    await loadMessages();
+    // Force reload to sync with server
+    setTimeout(() => {
+      loadMessages();
+    }, 500);
     
   } catch (error) {
-    console.error("Failed to send message:", error);
+    console.error("Failed to send message to server:", error);
     
-    // Mark as error
-    const index = currentMessages.findIndex(m => m.id === tempMessage.id);
-    if (index > -1) {
-      currentMessages[index].error = true;
-      currentMessages[index].text = `${text} (Failed: ${error.message})`;
-      renderMessages(currentMessages);
+    // Mark as failed
+    const pendingMsg = pendingMessages.get(tempId);
+    if (pendingMsg) {
+      pendingMsg.status = 'error';
+      pendingMessages.set(tempId, pendingMsg);
     }
     
     showConnectionError(`Failed to send: ${error.message}`);
+    
+    // Update display
+    renderMessages(currentMessages);
   }
+}
+
+/* ===============================
+   DEBUG FUNCTIONS
+=============================== */
+function showDebugModal(content) {
+  const modal = document.getElementById('debug-modal');
+  const textEl = document.getElementById('debug-text');
   
-  // Keep focus
-  if (input) {
-    input.focus();
+  if (modal && textEl) {
+    textEl.textContent = content;
+    modal.style.display = 'flex';
+  }
+}
+
+function closeDebugModal() {
+  const modal = document.getElementById('debug-modal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function copyDebugInfo() {
+  const textEl = document.getElementById('debug-text');
+  if (textEl) {
+    const text = textEl.textContent;
+    
+    navigator.clipboard.writeText(text).then(() => {
+      const copyBtn = document.querySelector('.copy-btn');
+      const originalText = copyBtn.textContent;
+      copyBtn.textContent = 'Copied!';
+      copyBtn.style.background = '#4CAF50';
+      
+      setTimeout(() => {
+        copyBtn.textContent = originalText;
+        copyBtn.style.background = '#1e6cff';
+      }, 2000);
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+      alert('Failed to copy to clipboard');
+    });
+  }
+}
+
+async function debugServerResponse() {
+  console.log("=== DEBUG: Checking server response format ===");
+  
+  let debugContent = "=== MATKA MESSAGING DEBUG ===\n";
+  debugContent += `Timestamp: ${new Date().toISOString()}\n`;
+  debugContent += `Server URL: ${SERVER}\n`;
+  debugContent += `Current User: ${currentUser || 'Not set'}\n`;
+  debugContent += `Current Messages: ${currentMessages.length}\n`;
+  debugContent += `Pending Messages: ${pendingMessages.size}\n`;
+  debugContent += "\n--- Server Tests ---\n\n";
+  
+  try {
+    // Test 1: GET /messages
+    debugContent += "1. GET /messages:\n";
+    const getResponse = await fetch(`${SERVER}/messages`);
+    debugContent += `   Status: ${getResponse.status}\n`;
+    
+    const getData = await getResponse.json();
+    debugContent += `   Returns array: ${Array.isArray(getData)}\n`;
+    debugContent += `   Message count: ${getData.length}\n`;
+    debugContent += `   First message: ${JSON.stringify(getData[0], null, 2)}\n\n`;
+    
+    // Test 2: POST /messages
+    debugContent += "2. POST /messages:\n";
+    const postResponse = await fetch(`${SERVER}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        from: "DebugUser", 
+        text: `Test message ${Date.now()}` 
+      })
+    });
+    
+    debugContent += `   Status: ${postResponse.status}\n`;
+    
+    const postData = await postResponse.json();
+    debugContent += `   Returns array: ${Array.isArray(postData)}\n`;
+    debugContent += `   Response: ${JSON.stringify(postData, null, 2)}\n\n`;
+    
+    // Test 3: Server health
+    debugContent += "3. GET /health:\n";
+    try {
+      const healthResponse = await fetch(`${SERVER}/health`);
+      debugContent += `   Status: ${healthResponse.status}\n`;
+      if (healthResponse.ok) {
+        const healthData = await healthResponse.json();
+        debugContent += `   Response: ${JSON.stringify(healthData, null, 2)}\n`;
+      }
+    } catch (healthError) {
+      debugContent += `   Error: ${healthError.message}\n`;
+    }
+    
+    debugContent += "\n--- Frontend State ---\n";
+    debugContent += `Message Display: INSTANT FEEDBACK ENABLED ✓\n`;
+    debugContent += `Server returns array: ${Array.isArray(postData) ? "YES ✓" : "NO ✗ (but frontend handles it)"}\n`;
+    debugContent += `Server is working: ${getResponse.ok && postResponse.ok ? "YES ✓" : "NO ✗"}\n`;
+    
+    if (!Array.isArray(postData)) {
+      debugContent += "\n⚠️  NOTE: Server returns object, not array!\n";
+      debugContent += "Frontend handles this with instant feedback + background sync.\n";
+    }
+    
+    showDebugModal(debugContent);
+    
+  } catch (error) {
+    debugContent += `ERROR: ${error.message}\n`;
+    debugContent += `Stack: ${error.stack}\n`;
+    
+    showDebugModal(debugContent);
   }
 }
 
 /* ===============================
    INITIALIZATION
 =============================== */
-
 document.addEventListener("DOMContentLoaded", () => {
-  // Update server display
   const serverStatusEl = document.getElementById('server-status');
   const serverInputEl = document.getElementById('server-input');
   if (serverStatusEl) serverStatusEl.textContent = SERVER;
   if (serverInputEl) serverInputEl.value = SERVER;
   
-  // Set up control buttons
   document.querySelectorAll("[data-mode]").forEach(btn => {
     btn.addEventListener("click", () => {
       document.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
@@ -874,7 +1140,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Enter key handlers
   const usernameInput = document.getElementById("username-input");
   if (usernameInput) {
     usernameInput.addEventListener("keypress", (e) => {
@@ -906,16 +1171,13 @@ document.addEventListener("DOMContentLoaded", () => {
     setUsernameBtn.addEventListener("click", setUsername);
   }
   
-  // Initial load
   updateTopBar();
   setInterval(updateTopBar, 10000);
   
-  // Focus
   if (usernameInput) {
     usernameInput.focus();
   }
   
-  // Test server connection immediately
   setTimeout(() => {
     console.log("Testing server connection...");
     fetch(`${SERVER}/health`, { 
@@ -939,7 +1201,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }, 1000);
 });
 
-// Clean up
 window.addEventListener("beforeunload", () => {
   if (messageInterval) clearInterval(messageInterval);
 });
