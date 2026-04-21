@@ -106,7 +106,10 @@ const GPC = {
         for (let d = 0; d < len; d++) {
           const doy = starts[i] + d;
           if (doy <= 364) {
-            this.heptads[doy] = { suit: this.suitCodes[s], week: w };
+            this.heptads[doy] = {
+              suit: this.suitCodes[s],
+              week: w
+            };
           }
         }
         i++;
@@ -168,7 +171,7 @@ let heptad = false;
 GPC.initHeptads();
 
 /* ===============================
-   FORMATTER (UNCHANGED)
+   FORMATTER
 =============================== */
 
 function formatGPC(gpcDate) {
@@ -216,10 +219,12 @@ function updateTopBar() {
 }
 
 /* ===============================
-   EMAIL LOADER (FIXED)
+   EMAIL LOADER (ROBUST FIX)
 =============================== */
 
 async function loadEmails() {
+  const container = document.getElementById("emails");
+
   try {
     const res = await fetch("https://matka-3.onrender.com/emails", {
       cache: "no-store"
@@ -228,22 +233,26 @@ async function loadEmails() {
     let data = [];
 
     if (res.ok) {
-      data = await res.json();
+      try {
+        data = await res.json();
+      } catch (e) {
+        container.innerHTML = `<div class="email"><p>JSON parse error</p></div>`;
+        return;
+      }
     }
 
     if (!Array.isArray(data)) data = [];
 
-    // 🔥 FORCE TEST EMAIL IF EMPTY
     if (data.length === 0) {
       data = [{
         subject: "Test Email",
         from: "system@matka.local",
         date: new Date().toISOString(),
-        body: "This is a fallback test email (API empty or offline)."
+        body: "Fallback email (API empty or broken)"
       }];
     }
 
-    document.getElementById("emails").innerHTML = data.map(e => {
+    container.innerHTML = data.map(e => {
       const date = new Date(e.date || Date.now());
       const days = GPC.daysFromGregorian(date);
       const gpcDate = GPC.gpcFromDays(days);
@@ -260,13 +269,11 @@ async function loadEmails() {
     }).join("");
 
   } catch (err) {
-    console.log("Email load error:", err);
-
-    document.getElementById("emails").innerHTML = `
+    container.innerHTML = `
       <div class="email">
         <div class="subject">Test Email</div>
         <div class="meta">system@matka.local</div>
-        <p>Offline fallback email (fetch failed)</p>
+        <p>Fetch failed: ${err.message}</p>
       </div>
     `;
   }
