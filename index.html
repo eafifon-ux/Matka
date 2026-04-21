@@ -146,15 +146,6 @@ h1 {
   border-radius: 6px;
   cursor: pointer;
   font-weight: bold;
-  transition: background 0.2s;
-}
-
-#send-btn:hover {
-  background: #0a5ae0;
-}
-
-#send-btn:active {
-  transform: translateY(1px);
 }
 
 .empty-state {
@@ -206,7 +197,7 @@ h1 {
 
 <script>
 /* ===============================
-   GPC ENGINE (UNCHANGED FROM FIRST VERSION)
+   GPC ENGINE (UNCHANGED)
 =============================== */
 
 const GPC = {
@@ -291,24 +282,15 @@ const GPC = {
   }
 };
 
-/* ===============================
-   APPLICATION STATE
-=============================== */
-
 let mode = "DOY";
 let heptad = false;
 const SERVER = "https://matka-3.onrender.com";
 let currentMessages = [];
-let messageInterval = null;
-
-/* ===============================
-   INITIALIZE GPC
-=============================== */
 
 GPC.initHeptads();
 
 /* ===============================
-   GPC FORMATTER (FROM FIRST VERSION)
+   FORMATTER
 =============================== */
 
 function formatGPC(gpcDate) {
@@ -319,35 +301,24 @@ function formatGPC(gpcDate) {
 
   let core = "";
 
-  if (mode === "DOY") {
-    core = String(doy).padStart(3, "0");
-  } else if (mode === "DOS") {
+  if (mode === "DOY") core = String(doy).padStart(3,"0");
+  else if (mode === "DOS") {
     const season = Math.floor((doy - 1) / 91) + 1;
     const dayInSeason = ((doy - 1) % 91) + 1;
-    core = `Q${season}-${String(dayInSeason).padStart(2, "0")}`;
-  } else if (mode === "DOM") {
+    core = `Q${season}-${String(dayInSeason).padStart(2,"0")}`;
+  } else {
     const monthLengths = [30,30,31,30,30,31,30,30,31,30,30,31];
     let remaining = doy;
     let month = 0;
-
     for (let i = 0; i < monthLengths.length; i++) {
-      if (remaining <= monthLengths[i]) {
-        month = i + 1;
-        break;
-      }
+      if (remaining <= monthLengths[i]) { month = i+1; break; }
       remaining -= monthLengths[i];
     }
-
     core = `${String(month).padStart(2,"0")}.${String(remaining).padStart(2,"0")}`;
   }
 
-  if (heptad) return `${emoji} ${core} ${suitChar}${heptadInfo.week}`;
-  return `${emoji} ${year}.${core}`;
+  return heptad ? `${emoji} ${core} ${suitChar}${heptadInfo.week}` : `${emoji} ${year}.${core}`;
 }
-
-/* ===============================
-   TOP BAR UPDATE
-=============================== */
 
 function updateTopBar() {
   const days = GPC.daysFromGregorian(new Date());
@@ -358,6 +329,12 @@ function updateTopBar() {
 /* ===============================
    MESSAGE FUNCTIONS
 =============================== */
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 
 async function loadMessages() {
   try {
@@ -409,7 +386,7 @@ function renderMessages(messages) {
     const gpcDate = GPC.gpcFromDays(days);
     const gpcFormatted = formatGPC(gpcDate);
     
-    const isMine = msg.from === "user" || msg.from === localStorage.getItem('username') || msg.from?.toLowerCase().includes('you');
+    const isMine = msg.from === "user" || msg.from === "You" || (typeof msg.from === 'string' && msg.from.toLowerCase().includes('you'));
     
     return `
       <div class="message ${isMine ? 'mine' : ''}">
@@ -446,13 +423,6 @@ async function sendMessage() {
   if (!text) return;
   
   // Add temporary local message
-  const tempMsg = {
-    from: "You",
-    text: text,
-    time: new Date().toISOString(),
-    pending: true
-  };
-  
   const days = GPC.daysFromGregorian(new Date());
   const gpcDate = GPC.gpcFromDays(days);
   const gpcFormatted = formatGPC(gpcDate);
@@ -461,23 +431,24 @@ async function sendMessage() {
   const emptyState = document.getElementById("empty-state");
   emptyState.style.display = 'none';
   
-  const messageDiv = document.createElement('div');
-  messageDiv.className = 'message mine';
-  messageDiv.innerHTML = `
-    <div class="text">${escapeHtml(text)}</div>
-    <div class="meta">
-      <span class="sender">You</span>
-      <span class="time">${gpcFormatted} (sending...)</span>
-    </div>
-  `;
-  container.appendChild(messageDiv);
-  container.scrollTop = container.scrollHeight;
+  const tempId = Date.now();
+  const tempMsg = {
+    id: tempId,
+    from: "You",
+    text: text,
+    time: new Date().toISOString(),
+    pending: true
+  };
+  
+  // Add temp message to current array
+  currentMessages.push(tempMsg);
+  renderMessages(currentMessages);
   
   // Clear input
   input.value = '';
   
   try {
-    // Send to server
+    // Send to server (compatible with your render server)
     const response = await fetch(`${SERVER}/messages`, {
       method: "POST",
       headers: {
@@ -494,28 +465,31 @@ async function sendMessage() {
       throw new Error(`Send failed: ${response.status}`);
     }
     
-    // Update the pending message status
-    messageDiv.querySelector('.time').textContent = gpcFormatted;
+    // Remove temp message
+    const tempIndex = currentMessages.findIndex(m => m.id === tempId);
+    if (tempIndex > -1) {
+      currentMessages.splice(tempIndex, 1);
+    }
     
-    // Reload all messages
+    // Reload all messages from server
     await loadMessages();
     
   } catch (error) {
     console.error("Failed to send message:", error);
-    messageDiv.querySelector('.time').textContent = `${gpcFormatted} (failed)`;
-    messageDiv.style.opacity = '0.7';
+    
+    // Mark as failed
+    const failedIndex = currentMessages.findIndex(m => m.id === tempId);
+    if (failedIndex > -1) {
+      currentMessages[failedIndex].failed = true;
+      currentMessages[failedIndex].text = `${text} (failed to send)`;
+      renderMessages(currentMessages);
+    }
   }
 }
 
 /* ===============================
-   HELPER FUNCTIONS
+   CONTROLS AND INITIALIZATION
 =============================== */
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
 
 function handleEnterKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -524,56 +498,43 @@ function handleEnterKey(e) {
   }
 }
 
-/* ===============================
-   CONTROLS
-=============================== */
-
-document.querySelectorAll("[data-mode]").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    mode = btn.dataset.mode;
-    updateTopBar();
-    renderMessages(currentMessages); // Re-render messages with new format
+document.addEventListener("DOMContentLoaded", () => {
+  // Set up control buttons
+  document.querySelectorAll("[data-mode]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      mode = btn.dataset.mode;
+      updateTopBar();
+      renderMessages(currentMessages);
+    });
   });
-});
 
-document.getElementById("heptad-btn").addEventListener("click", () => {
-  heptad = !heptad;
-  document.getElementById("heptad-btn").classList.toggle("active", heptad);
-  updateTopBar();
-  renderMessages(currentMessages); // Re-render messages with new format
-});
+  document.getElementById("heptad-btn").addEventListener("click", () => {
+    heptad = !heptad;
+    document.getElementById("heptad-btn").classList.toggle("active", heptad);
+    updateTopBar();
+    renderMessages(currentMessages);
+  });
 
-/* ===============================
-   INITIALIZATION
-=============================== */
-
-window.addEventListener("load", () => {
-  // Initialize top bar
-  updateTopBar();
+  // Set up enter key for input
+  document.getElementById("message-input").addEventListener("keypress", handleEnterKey);
   
-  // Load initial messages
+  // Set up send button
+  document.getElementById("send-btn").addEventListener("click", sendMessage);
+  
+  // Initial load
+  updateTopBar();
   loadMessages();
   
-  // Set up auto-refresh
-  messageInterval = setInterval(loadMessages, 3000);
+  // Auto-refresh messages every 3 seconds
+  setInterval(loadMessages, 3000);
   
-  // Set up top bar refresh
+  // Update top bar every 10 seconds
   setInterval(updateTopBar, 10000);
-  
-  // Set up enter key
-  document.getElementById("message-input").addEventListener("keypress", handleEnterKey);
   
   // Focus input
   document.getElementById("message-input").focus();
-});
-
-// Clean up interval on page unload
-window.addEventListener("beforeunload", () => {
-  if (messageInterval) {
-    clearInterval(messageInterval);
-  }
 });
 </script>
 
