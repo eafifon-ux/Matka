@@ -1,59 +1,39 @@
 const express = require("express");
-const nodemailer = require("nodemailer");
+const fs = require("fs");
 const cors = require("cors");
-require("dotenv").config();
 
 const app = express();
 
-// ===============================
-// MIDDLEWARE
-// ===============================
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// 🔥 DEBUG: show every request hitting server
-app.use((req, res, next) => {
-  console.log("➡️", req.method, req.path);
-  if (req.method === "POST") {
-    console.log("BODY:", req.body);
-  }
-  next();
-});
+const DATA_FILE = "./emails.json";
 
 // ===============================
-// CONFIG
-// ===============================
-const EMAIL = process.env.EMAIL;
-const PASSWORD = process.env.PASSWORD;
-
-console.log("📧 EMAIL LOADED:", EMAIL);
-
-if (!EMAIL || !PASSWORD) {
-  console.error("❌ Missing EMAIL or PASSWORD in environment variables");
-}
-
-// ===============================
-// INBOX
+// LOAD EXISTING EMAILS
 // ===============================
 let emails = [];
 
-// ===============================
-// SMTP (SEND EMAIL)
-// ===============================
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: EMAIL,
-    pass: PASSWORD
+if (fs.existsSync(DATA_FILE)) {
+  try {
+    emails = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+  } catch {
+    emails = [];
   }
-});
+}
 
 // ===============================
-// HEALTH CHECK
+// SAVE FUNCTION
+// ===============================
+function saveEmails() {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(emails, null, 2));
+}
+
+// ===============================
+// HEALTH
 // ===============================
 app.get("/", (req, res) => {
-  res.send("Matka Mail Server Running");
+  res.send("Matka Mail Running");
 });
 
 // ===============================
@@ -64,46 +44,7 @@ app.get("/emails", (req, res) => {
 });
 
 // ===============================
-// TEST ROUTE (IMPORTANT DEBUG TOOL)
-// ===============================
-app.get("/test-incoming", (req, res) => {
-  emails.unshift({
-    id: Date.now(),
-    subject: "TEST EMAIL WORKS",
-    from: "system",
-    body: "manual test",
-    date: new Date().toISOString()
-  });
-
-  res.send("OK");
-});
-
-// ===============================
-// SEND EMAIL
-// ===============================
-app.post("/send", async (req, res) => {
-  const { to, subject, body } = req.body;
-
-  try {
-    await transporter.sendMail({
-      from: EMAIL,
-      to,
-      subject,
-      text: body
-    });
-
-    console.log("📤 SENT:", subject);
-
-    res.json({ ok: true });
-
-  } catch (e) {
-    console.error("SEND ERROR:", e);
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-// ===============================
-// INCOMING EMAIL (FROM CLOUDFLARE WORKER)
+// INCOMING EMAIL
 // ===============================
 app.post("/incoming-email", (req, res) => {
   const email = {
@@ -116,16 +57,18 @@ app.post("/incoming-email", (req, res) => {
 
   emails.unshift(email);
 
-  console.log("📩 RECEIVED EMAIL:", email);
+  // keep last 200 emails only
+  emails = emails.slice(0, 200);
 
-  res.status(200).json({ ok: true });
+  saveEmails();
+
+  console.log("📩 EMAIL RECEIVED:", email.subject);
+
+  res.send("OK");
 });
 
 // ===============================
-// START SERVER
+// START
 // ===============================
 const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`✅ Mail server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log("Server running on", PORT));
