@@ -580,41 +580,57 @@ function setUsername() {
 }
 
 /* ===============================
-   CONNECTION MANAGEMENT
+   CONNECTION MANAGEMENT - FIXED!
 =============================== */
 
 function updateStatus(status) {
   const indicator = document.getElementById('status-indicator');
-  indicator.className = 'status-indicator status-' + status;
+  if (indicator) {
+    indicator.className = 'status-indicator status-' + status;
+  }
   
   const serverEl = document.getElementById('server-status');
-  if (status === 'connected') {
-    serverEl.style.color = '#4CAF50';
-  } else if (status === 'connecting') {
-    serverEl.style.color = '#FF9800';
-  } else {
-    serverEl.style.color = '#F44336';
+  if (serverEl) {
+    if (status === 'connected') {
+      serverEl.style.color = '#4CAF50';
+    } else if (status === 'connecting') {
+      serverEl.style.color = '#FF9800';
+    } else {
+      serverEl.style.color = '#F44336';
+    }
   }
 }
 
 function showConnectionError(message) {
   const statusEl = document.getElementById('connection-status');
-  statusEl.textContent = message;
-  statusEl.className = 'connection-status error';
-  statusEl.style.display = 'block';
-  setTimeout(() => {
-    statusEl.style.display = 'none';
-  }, 5000);
+  if (statusEl) {
+    statusEl.textContent = message;
+    statusEl.className = 'connection-status error';
+    statusEl.style.display = 'block';
+    setTimeout(() => {
+      if (statusEl) {
+        statusEl.style.display = 'none';
+      }
+    }, 5000);
+  } else {
+    console.error('Connection error:', message);
+  }
 }
 
 function showConnectionSuccess(message) {
   const statusEl = document.getElementById('connection-status');
-  statusEl.textContent = message;
-  statusEl.className = 'connection-status success';
-  statusEl.style.display = 'block';
-  setTimeout(() => {
-    statusEl.style.display = 'none';
-  }, 3000);
+  if (statusEl) {
+    statusEl.textContent = message;
+    statusEl.className = 'connection-status success';
+    statusEl.style.display = 'block';
+    setTimeout(() => {
+      if (statusEl) {
+        statusEl.style.display = 'none';
+      }
+    }, 3000);
+  } else {
+    console.log('Success:', message);
+  }
 }
 
 /* ===============================
@@ -658,8 +674,10 @@ async function loadMessages() {
       
       // Update message count
       const count = messages.length;
-      document.getElementById('message-count').textContent = 
-        ` • ${count} message${count !== 1 ? 's' : ''}`;
+      const messageCountEl = document.getElementById('message-count');
+      if (messageCountEl) {
+        messageCountEl.textContent = ` • ${count} message${count !== 1 ? 's' : ''}`;
+      }
     }
     
   } catch (error) {
@@ -682,6 +700,8 @@ async function loadMessages() {
 function renderMessages(messages) {
   const container = document.getElementById("messages");
   const emptyState = document.getElementById("empty-state");
+  
+  if (!container || !emptyState) return;
   
   if (!messages || messages.length === 0) {
     emptyState.style.display = 'block';
@@ -727,7 +747,9 @@ function renderMessages(messages) {
   
   // Scroll to bottom
   setTimeout(() => {
-    container.scrollTop = container.scrollHeight;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, 10);
 }
 
@@ -738,6 +760,8 @@ async function sendMessage() {
   }
   
   const input = document.getElementById("message-input");
+  if (!input) return;
+  
   const text = input.value.trim();
   
   if (!text) {
@@ -762,7 +786,7 @@ async function sendMessage() {
   
   try {
     console.log(`Sending to: ${SERVER}/messages`);
-    console.log(`Message data:`, { from: currentUser, text: text, to: "all" });
+    console.log(`Message data:`, { from: currentUser, text: text });
     
     const response = await fetch(`${SERVER}/messages`, {
       method: "POST",
@@ -772,8 +796,8 @@ async function sendMessage() {
       },
       body: JSON.stringify({
         from: currentUser,
-        text: text,
-        to: "all"
+        text: text
+        // Remove "to": "all" if your server doesn't expect it
       })
     });
     
@@ -809,7 +833,9 @@ async function sendMessage() {
   }
   
   // Keep focus
-  input.focus();
+  if (input) {
+    input.focus();
+  }
 }
 
 /* ===============================
@@ -817,9 +843,11 @@ async function sendMessage() {
 =============================== */
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Update server display - FIXED!
-  document.getElementById('server-status').textContent = SERVER;
-  document.getElementById('server-input').value = SERVER;
+  // Update server display
+  const serverStatusEl = document.getElementById('server-status');
+  const serverInputEl = document.getElementById('server-input');
+  if (serverStatusEl) serverStatusEl.textContent = SERVER;
+  if (serverInputEl) serverInputEl.value = SERVER;
   
   // Set up control buttons
   document.querySelectorAll("[data-mode]").forEach(btn => {
@@ -834,39 +862,58 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  document.getElementById("heptad-btn").addEventListener("click", () => {
-    heptad = !heptad;
-    const btn = document.getElementById("heptad-btn");
-    btn.classList.toggle("active", heptad);
-    updateTopBar();
-    if (currentUser) {
-      renderMessages(currentMessages);
-    }
-  });
+  const heptadBtn = document.getElementById("heptad-btn");
+  if (heptadBtn) {
+    heptadBtn.addEventListener("click", () => {
+      heptad = !heptad;
+      heptadBtn.classList.toggle("active", heptad);
+      updateTopBar();
+      if (currentUser) {
+        renderMessages(currentMessages);
+      }
+    });
+  }
 
   // Enter key handlers
-  document.getElementById("username-input").addEventListener("keypress", (e) => {
-    if (e.key === 'Enter') setUsername();
-  });
+  const usernameInput = document.getElementById("username-input");
+  if (usernameInput) {
+    usernameInput.addEventListener("keypress", (e) => {
+      if (e.key === 'Enter') setUsername();
+    });
+  }
   
-  document.getElementById("message-input").addEventListener("keypress", (e) => {
-    if (e.key === 'Enter') sendMessage();
-  });
+  const messageInput = document.getElementById("message-input");
+  if (messageInput) {
+    messageInput.addEventListener("keypress", (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+  }
   
-  // Server input enter key
-  document.getElementById("server-input").addEventListener("keypress", (e) => {
-    if (e.key === 'Enter') updateServer();
-  });
+  const serverInput = document.getElementById("server-input");
+  if (serverInput) {
+    serverInput.addEventListener("keypress", (e) => {
+      if (e.key === 'Enter') updateServer();
+    });
+  }
   
-  // Set up send button
-  document.getElementById("send-btn").addEventListener("click", sendMessage);
+  const sendBtn = document.getElementById("send-btn");
+  if (sendBtn) {
+    sendBtn.addEventListener("click", sendMessage);
+  }
+  
+  const setUsernameBtn = document.getElementById("set-username-btn");
+  if (setUsernameBtn) {
+    setUsernameBtn.addEventListener("click", setUsername);
+  }
   
   // Initial load
   updateTopBar();
   setInterval(updateTopBar, 10000);
   
   // Focus
-  document.getElementById("username-input").focus();
+  if (usernameInput) {
+    usernameInput.focus();
+  }
   
   // Test server connection immediately
   setTimeout(() => {
