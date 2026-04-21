@@ -28,7 +28,7 @@
     <!-- MAIN APP -->
     <div id="main-app" style="display:none;">
 
-      <!-- GPC DISPLAY -->
+      <!-- GPC DISPLAY (IMPORTANT) -->
       <div id="gpc-display"></div>
 
       <!-- CONTROLS -->
@@ -50,7 +50,7 @@
         <button onclick="sendEmail()">Send</button>
       </div>
 
-      <!-- 🔥 INBOX (FIXED) -->
+      <!-- INBOX -->
       <div id="inbox-section">
         <h3>Inbox</h3>
         <div id="emails"></div>
@@ -60,14 +60,23 @@
 
   </div>
 
-  <!-- LOGIC -->
+  <!-- ========================= -->
+  <!-- 1. GPC ENGINE (LOAD FIRST) -->
+  <!-- ========================= -->
   <script src="game.js"></script>
 
-  <!-- 🔥 EMAIL LOADER (IMPORTANT FIX) -->
+  <!-- ========================= -->
+  <!-- 2. EMAIL SYSTEM (ISOLATED) -->
+  <!-- ========================= -->
   <script>
+    let emailRetry = 2000;
+
     async function loadEmails() {
       try {
-        const res = await fetch("https://matka-3.onrender.com/emails");
+        const res = await fetch("https://matka-3.onrender.com/emails", {
+          cache: "no-store"
+        });
+
         const data = await res.json();
 
         const container = document.getElementById("emails");
@@ -80,13 +89,23 @@
           </div>
         `).join("");
 
+        emailRetry = 2000;
+
       } catch (err) {
-        console.error("Email load error:", err);
+        console.log("Email fetch retry...", err);
+
+        emailRetry = Math.min(emailRetry * 1.5, 10000);
+
+        setTimeout(loadEmails, emailRetry);
+        return;
       }
     }
 
-    setInterval(loadEmails, 3000);
-    loadEmails();
+    // SAFE START (DO NOT BLOCK GPC)
+    window.addEventListener("load", () => {
+      loadEmails();
+      setInterval(loadEmails, 5000);
+    });
   </script>
 
 </body>
