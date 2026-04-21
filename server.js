@@ -7,7 +7,6 @@ app.use(express.json());
 
 /* ===============================
    MATKA MESSAGE STORE (IN MEMORY)
-   (later we upgrade to DB)
 =============================== */
 
 let messages = [
@@ -15,27 +14,17 @@ let messages = [
     id: 1,
     from: "system",
     to: "all",
-    text: "Matka Messaging is live.",
+    text: "Welcome to Matka Messaging!",
     timestamp: new Date().toISOString()
   }
 ];
 
 /* ===============================
-   GET MESSAGES
+   GET ALL MESSAGES
 =============================== */
 
 app.get("/messages", (req, res) => {
-  const { user } = req.query;
-
-  // optional filtering later
-  if (user) {
-    return res.json(
-      messages.filter(
-        m => m.to === user || m.to === "all" || m.from === user
-      )
-    );
-  }
-
+  console.log("GET /messages - returning", messages.length, "messages");
   res.json(messages);
 });
 
@@ -44,7 +33,9 @@ app.get("/messages", (req, res) => {
 =============================== */
 
 app.post("/messages", (req, res) => {
-  const { from, to, text } = req.body;
+  const { from, text } = req.body;
+  
+  console.log("POST /messages - from:", from, "text:", text);
 
   if (!from || !text) {
     return res.status(400).json({
@@ -55,13 +46,15 @@ app.post("/messages", (req, res) => {
   const newMessage = {
     id: messages.length + 1,
     from,
-    to: to || "all",
+    to: "all",
     text,
     timestamp: new Date().toISOString()
   };
 
   messages.push(newMessage);
 
+  console.log("Added message, total:", messages.length);
+  
   res.json({
     success: true,
     message: newMessage
@@ -69,7 +62,7 @@ app.post("/messages", (req, res) => {
 });
 
 /* ===============================
-   DELETE (optional debug tool)
+   DELETE (for testing)
 =============================== */
 
 app.delete("/messages", (req, res) => {
@@ -78,11 +71,21 @@ app.delete("/messages", (req, res) => {
 });
 
 /* ===============================
+   SERVE STATIC FILES (HTML)
+=============================== */
+
+app.use(express.static('.')); // This serves index.html
+
+/* ===============================
    HEALTH CHECK
 =============================== */
 
-app.get("/", (req, res) => {
-  res.send("Matka Messaging Server running");
+app.get("/health", (req, res) => {
+  res.json({ 
+    status: "healthy",
+    messages: messages.length,
+    users: [...new Set(messages.map(m => m.from))]
+  });
 });
 
 /* ===============================
@@ -92,5 +95,6 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("🚀 Matka Messaging running on port", PORT);
+  console.log("🚀 Matka Messaging Server running on port", PORT);
+  console.log(`📁 Serving files from: ${__dirname}`);
 });
