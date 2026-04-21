@@ -93,6 +93,8 @@ h1 {
   border-left-color: #ffa726;
   text-align: center;
   font-style: italic;
+  font-size: 0.9em;
+  padding: 8px 15px;
 }
 
 .message .text {
@@ -162,6 +164,33 @@ h1 {
   margin-top: 10px;
   padding: 5px;
 }
+
+.loading {
+  text-align: center;
+  color: #888;
+  padding: 20px;
+  font-style: italic;
+}
+
+.status-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
+
+.status-connected {
+  background: #4CAF50;
+}
+
+.status-connecting {
+  background: #FF9800;
+}
+
+.status-disconnected {
+  background: #F44336;
+}
 </style>
 </head>
 
@@ -183,6 +212,9 @@ h1 {
     <div class="empty-state" id="empty-state">
       No messages yet. Send your first message!
     </div>
+    <div class="loading" id="loading" style="display: none;">
+      Loading messages...
+    </div>
   </div>
   
   <div id="input-area">
@@ -192,7 +224,9 @@ h1 {
 </div>
 
 <div class="debug-info">
+  <span id="status-indicator" class="status-indicator status-connecting"></span>
   Connected to: <span id="server-status">https://matka-3.onrender.com</span>
+  <span id="message-count"> • 0 messages</span>
 </div>
 
 <script>
@@ -282,10 +316,17 @@ const GPC = {
   }
 };
 
+/* ===============================
+   APPLICATION STATE
+=============================== */
+
 let mode = "DOY";
 let heptad = false;
 const SERVER = "https://matka-3.onrender.com";
 let currentMessages = [];
+let messageInterval = null;
+let lastMessageId = null;
+let connectionStatus = 'connecting';
 
 GPC.initHeptads();
 
@@ -327,7 +368,7 @@ function updateTopBar() {
 }
 
 /* ===============================
-   MESSAGE FUNCTIONS
+   MESSAGE FUNCTIONS - UPDATED FOR BETTER RECEIVING
 =============================== */
 
 function escapeHtml(text) {
@@ -336,31 +377,118 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function updateStatus(status) {
+  connectionStatus = status;
+  const indicator = document.getElementById('status-indicator');
+  indicator.className = 'status-indicator status-' + status;
+  
+  if (status === 'connected') {
+    document.getElementById('server-status').style.color = '#4CAF50';
+  } else if (status === 'connecting') {
+    document.getElementById('server-status').style.color = '#FF9800';
+  } else {
+    document.getElementById('server-status').style.color = '#F44336';
+  }
+}
+
 async function loadMessages() {
+  const loadingEl = document.getElementById('loading');
+  const emptyState = document.getElementById('empty-state');
+  
   try {
-    const res = await fetch(`${SERVER}/messages`, {
-      cache: "no-store",
-      headers: {
-        'Accept': 'application/json'
-      }
-    });
+    loadingEl.style.display = 'block';
+    emptyState.style.display = 'none';
     
-    if (!res.ok) {
-      throw new Error(`Server error: ${res.status}`);
+    // Try multiple endpoints - your server might use different structures
+    let data = null;
+    let response = null;
+    
+    try {
+      // Try the standard messages endpoint first
+      response = await fetch(`${SERVER}/messages`, {
+        cache: "no-store",
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        data = await response.json();
+        updateStatus('connected');
+      } else {
+        // Try alternative endpoint
+        response = await fetch(`${SERVER}/api/messages`, {
+          cache: "no-store",
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          data = await response.json();
+          updateStatus('connected');
+        } else {
+          throw new Error(`Server error: ${response.status}`);
+        }
+      }
+    } catch (fetchError) {
+      // Try one more time with a different approach
+      try {
+        response = await fetch(`${SERVER}/`, {
+          cache: "no-store"
+        });
+        if (response.ok) {
+          // Server is up but endpoint might be different
+          data = [];
+          updateStatus('connected');
+          showSystemMessage('Server connected, but no messages endpoint found');
+        } else {
+          throw fetchError;
+        }
+      } catch (finalError) {
+        throw finalError;
+      }
     }
     
-    const data = await res.json();
-    const messages = Array.isArray(data) ? data : (data.messages || data.data || []);
+    // Handle different response formats
+    let messages = [];
     
-    // Only update if messages changed
-    if (JSON.stringify(messages) !== JSON.stringify(currentMessages)) {
+    if (Array.isArray(data)) {
+      messages = data;
+    } else if (data && typeof data === 'object') {
+      // Try common property names
+      messages = data.messages || data.data || data.items || [];
+    }
+    
+    // Check if messages actually changed
+    const messagesChanged = JSON.stringify(messages) !== JSON.stringify(currentMessages);
+    
+    if (messagesChanged) {
       currentMessages = messages;
       renderMessages(messages);
+      
+      // Update message count
+      document.getElementById('message-count').textContent = ` • ${messages.length} message${messages.length !== 1 ? 's' : ''}`;
+      
+      // Store last message ID for polling
+      if (messages.length > 0) {
+        lastMessageId = messages[messages.length - 1].id || messages[messages.length - 1].time;
+      }
     }
+    
+    loadingEl.style.display = 'none';
+    
   } catch (error) {
     console.error("Failed to load messages:", error);
+    loadingEl.style.display = 'none';
+    updateStatus('disconnected');
+    
     if (currentMessages.length === 0) {
-      showSystemMessage(`Connection error: ${error.message}. Retrying...`);
+      emptyState.style.display = 'block';
+      emptyState.textContent = 'Cannot connect to server. Check your connection.';
+    } else {
+      // Show error but keep existing messages
+      showSystemMessage(`Connection lost: ${error.message}. Retrying...`);
     }
   }
 }
@@ -377,7 +505,7 @@ function renderMessages(messages) {
   
   emptyState.style.display = 'none';
   
-  // Sort messages by time (newest at bottom)
+  // Sort messages by time (oldest to newest)
   messages.sort((a, b) => new Date(a.time || 0) - new Date(b.time || 0));
   
   container.innerHTML = messages.map(msg => {
@@ -386,7 +514,11 @@ function renderMessages(messages) {
     const gpcDate = GPC.gpcFromDays(days);
     const gpcFormatted = formatGPC(gpcDate);
     
-    const isMine = msg.from === "user" || msg.from === "You" || (typeof msg.from === 'string' && msg.from.toLowerCase().includes('you'));
+    // Determine if message is from current user
+    const isMine = msg.from === "user" || msg.from === "You" || 
+                  (typeof msg.from === 'string' && 
+                   (msg.from.toLowerCase().includes('you') || 
+                    msg.from.toLowerCase().includes('user')));
     
     return `
       <div class="message ${isMine ? 'mine' : ''}">
@@ -412,6 +544,11 @@ function showSystemMessage(text) {
   messageDiv.innerHTML = `
     <div class="text">${escapeHtml(text)}</div>
   `;
+  
+  // Remove any existing system messages
+  const existingSystem = container.querySelectorAll('.message.system');
+  existingSystem.forEach(el => el.remove());
+  
   container.appendChild(messageDiv);
   container.scrollTop = container.scrollHeight;
 }
@@ -444,22 +581,39 @@ async function sendMessage() {
   currentMessages.push(tempMsg);
   renderMessages(currentMessages);
   
-  // Clear input
+  // Clear input and focus
   input.value = '';
+  input.focus();
   
   try {
-    // Send to server (compatible with your render server)
-    const response = await fetch(`${SERVER}/messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        from: "user",
-        text: text,
-        time: new Date().toISOString()
-      })
-    });
+    // Send to server - try different formats
+    const payload = {
+      from: "user",
+      text: text,
+      time: new Date().toISOString()
+    };
+    
+    let response = null;
+    
+    // Try POST to /messages first
+    try {
+      response = await fetch(`${SERVER}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (postError) {
+      // Try alternative endpoint
+      response = await fetch(`${SERVER}/api/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+    }
     
     if (!response.ok) {
       throw new Error(`Send failed: ${response.status}`);
@@ -477,12 +631,13 @@ async function sendMessage() {
   } catch (error) {
     console.error("Failed to send message:", error);
     
-    // Mark as failed
+    // Mark as failed but keep it visible
     const failedIndex = currentMessages.findIndex(m => m.id === tempId);
     if (failedIndex > -1) {
       currentMessages[failedIndex].failed = true;
       currentMessages[failedIndex].text = `${text} (failed to send)`;
       renderMessages(currentMessages);
+      showSystemMessage(`Failed to send: ${error.message}`);
     }
   }
 }
@@ -527,14 +682,21 @@ document.addEventListener("DOMContentLoaded", () => {
   updateTopBar();
   loadMessages();
   
-  // Auto-refresh messages every 3 seconds
-  setInterval(loadMessages, 3000);
+  // Auto-refresh messages every 2 seconds (faster for testing)
+  messageInterval = setInterval(loadMessages, 2000);
   
   // Update top bar every 10 seconds
   setInterval(updateTopBar, 10000);
   
   // Focus input
   document.getElementById("message-input").focus();
+});
+
+// Clean up interval on page unload
+window.addEventListener("beforeunload", () => {
+  if (messageInterval) {
+    clearInterval(messageInterval);
+  }
 });
 </script>
 
