@@ -338,7 +338,7 @@ h1 {
 <!-- SERVER CONFIGURATION -->
 <div class="server-config">
   <label for="server-input">Server URL:</label>
-  <input type="text" id="server-input" value="https://matka-3.onrender.com" />
+  <input type="text" id="server-input" value="https://matka-3-rhk1.onrender.com" />
   <button onclick="updateServer()">Update</button>
 </div>
 
@@ -376,18 +376,17 @@ h1 {
 
 <div class="debug-info">
   <span id="status-indicator" class="status-indicator status-connecting"></span>
-  Connected to: <span id="server-status">https://matka-3.onrender.com</span>
+  Connected to: <span id="server-status">https://matka-3-rhk1.onrender.com</span>
   <span id="message-count"> • 0 messages</span>
 </div>
 
 <script>
 /* ===============================
-   CONFIGURATION - FIXED!
+   CONFIGURATION - UPDATED!
 =============================== */
 
-// Your Render server URL
+// Your Render server URL - UPDATED!
 let SERVER = "https://matka-3-rhk1.onrender.com";
-
 
 console.log("Using server:", SERVER);
 
@@ -619,7 +618,7 @@ function showConnectionSuccess(message) {
 }
 
 /* ===============================
-   MESSAGE FUNCTIONS - SIMPLIFIED!
+   MESSAGE FUNCTIONS - IMPROVED!
 =============================== */
 
 function escapeHtml(text) {
@@ -635,7 +634,11 @@ async function loadMessages() {
     console.log(`Fetching from: ${SERVER}/messages`);
     
     const response = await fetch(`${SERVER}/messages`, {
-      cache: "no-store"
+      cache: "no-store",
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache'
+      }
     });
     
     console.log(`Response status: ${response.status}`);
@@ -654,8 +657,9 @@ async function loadMessages() {
       updateStatus('connected');
       
       // Update message count
+      const count = messages.length;
       document.getElementById('message-count').textContent = 
-        ` • ${messages.length} message${messages.length !== 1 ? 's' : ''}`;
+        ` • ${count} message${count !== 1 ? 's' : ''}`;
     }
     
   } catch (error) {
@@ -687,7 +691,14 @@ function renderMessages(messages) {
   
   emptyState.style.display = 'none';
   
-  container.innerHTML = messages.map(msg => {
+  // Sort by timestamp
+  const sortedMessages = [...messages].sort((a, b) => {
+    const timeA = new Date(a.timestamp || 0);
+    const timeB = new Date(b.timestamp || 0);
+    return timeA - timeB;
+  });
+  
+  container.innerHTML = sortedMessages.map(msg => {
     const date = new Date(msg.timestamp || Date.now());
     const days = GPC.daysFromGregorian(date);
     const gpcDate = GPC.gpcFromDays(days);
@@ -721,12 +732,18 @@ function renderMessages(messages) {
 }
 
 async function sendMessage() {
-  if (!currentUser) return;
+  if (!currentUser) {
+    showConnectionError('Please enter your name first');
+    return;
+  }
   
   const input = document.getElementById("message-input");
   const text = input.value.trim();
   
-  if (!text) return;
+  if (!text) {
+    showConnectionError('Please enter a message');
+    return;
+  }
   
   // Clear input
   input.value = '';
@@ -749,7 +766,10 @@ async function sendMessage() {
     
     const response = await fetch(`${SERVER}/messages`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
       body: JSON.stringify({
         from: currentUser,
         text: text,
@@ -760,7 +780,9 @@ async function sendMessage() {
     console.log(`Send response status: ${response.status}`);
     
     if (!response.ok) {
-      throw new Error(`Failed to send: ${response.status}`);
+      const errorText = await response.text();
+      console.error("Server error response:", errorText);
+      throw new Error(`Failed to send: ${response.status} ${errorText}`);
     }
     
     const result = await response.json();
@@ -768,7 +790,8 @@ async function sendMessage() {
     
     showConnectionSuccess('Message sent!');
     
-    // Reload messages to get the confirmed one from server
+    // Remove temp message and reload from server
+    currentMessages = currentMessages.filter(m => m.id !== tempMessage.id);
     await loadMessages();
     
   } catch (error) {
@@ -778,9 +801,10 @@ async function sendMessage() {
     const index = currentMessages.findIndex(m => m.id === tempMessage.id);
     if (index > -1) {
       currentMessages[index].error = true;
+      currentMessages[index].text = `${text} (Failed: ${error.message})`;
+      renderMessages(currentMessages);
     }
     
-    renderMessages(currentMessages);
     showConnectionError(`Failed to send: ${error.message}`);
   }
   
@@ -793,7 +817,7 @@ async function sendMessage() {
 =============================== */
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Update server display
+  // Update server display - FIXED!
   document.getElementById('server-status').textContent = SERVER;
   document.getElementById('server-input').value = SERVER;
   
@@ -834,6 +858,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === 'Enter') updateServer();
   });
   
+  // Set up send button
+  document.getElementById("send-btn").addEventListener("click", sendMessage);
+  
   // Initial load
   updateTopBar();
   setInterval(updateTopBar, 10000);
@@ -844,7 +871,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // Test server connection immediately
   setTimeout(() => {
     console.log("Testing server connection...");
-    fetch(`${SERVER}/`)
+    fetch(`${SERVER}/health`, { 
+      cache: "no-store",
+      headers: { 'Accept': 'application/json' }
+    })
       .then(response => {
         if (response.ok) {
           showConnectionSuccess('Connected to server!');
@@ -855,6 +885,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       })
       .catch(error => {
+        console.error("Connection test failed:", error);
         showConnectionError(`Cannot reach server: ${error.message}`);
         updateStatus('disconnected');
       });
