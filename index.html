@@ -177,10 +177,6 @@ h1 {
   border-left-color: #ff4444;
 }
 
-.message.sent {
-  opacity: 1;
-}
-
 .message .text {
   margin-bottom: 5px;
   line-height: 1.4;
@@ -448,7 +444,7 @@ h1 {
 <!-- SERVER CONFIGURATION -->
 <div class="server-config">
   <label for="server-input">Server URL:</label>
-  <input type="text" id="server-input" value="https://matka-3-rhk1.onrender.com" />
+  <input type="text" id="server-input" value="https://matka-1iig.onrender.com" />
   <button onclick="updateServer()">Update</button>
 </div>
 
@@ -489,7 +485,7 @@ h1 {
 
 <div class="debug-info">
   <span id="status-indicator" class="status-indicator status-connecting"></span>
-  Connected to: <span id="server-status">https://matka-3-rhk1.onrender.com</span>
+  Connected to: <span id="server-status">https://matka-1iig.onrender.com</span>
   <span id="message-count"> • 0 messages</span>
 </div>
 
@@ -509,9 +505,9 @@ h1 {
 
 <script>
 /* ===============================
-   CONFIGURATION
+   CONFIGURATION - USING WORKING SERVER!
 =============================== */
-let SERVER = "https://matka-3-rhk1.onrender.com";
+let SERVER = "https://matka-1iig.onrender.com";
 console.log("Using server:", SERVER);
 
 /* ===============================
@@ -749,7 +745,7 @@ function showConnectionSuccess(message) {
 }
 
 /* ===============================
-   MESSAGE FUNCTIONS - FIXED FOR REAL-TIME!
+   MESSAGE FUNCTIONS - SIMPLE WORKING VERSION
 =============================== */
 function escapeHtml(text) {
   const div = document.createElement('div');
@@ -766,17 +762,9 @@ async function loadMessages() {
   try {
     updateStatus('connecting');
     
-    console.log(`Fetching from: ${SERVER}/messages`);
+    console.log(`Fetching from: ${SERVER}/messages?_=${Date.now()}`);
     
-    const response = await fetch(`${SERVER}/messages?_=${Date.now()}`, {
-      cache: "no-store",
-      headers: {
-        'Accept': 'application/json',
-        'Cache-Control': 'no-cache'
-      }
-    });
-    
-    console.log(`Response status: ${response.status}`);
+    const response = await fetch(`${SERVER}/messages?_=${Date.now()}`);
     
     if (!response.ok) {
       throw new Error(`Server error: ${response.status}`);
@@ -785,13 +773,11 @@ async function loadMessages() {
     const messages = await response.json();
     console.log(`Received ${messages.length} messages`);
     
-    // Merge with pending messages
-    const allMessages = mergeMessages(messages);
-    currentMessages = allMessages;
-    renderMessages(allMessages);
+    currentMessages = messages;
+    renderMessages(messages);
     updateStatus('connected');
     
-    const count = allMessages.length;
+    const count = messages.length;
     const messageCountEl = document.getElementById('message-count');
     if (messageCountEl) {
       messageCountEl.textContent = ` • ${count} message${count !== 1 ? 's' : ''}`;
@@ -805,36 +791,13 @@ async function loadMessages() {
     if (container && currentMessages.length === 0) {
       container.innerHTML = `
         <div class="message system error">
-          <div class="text">Cannot connect to server at ${SERVER}</div>
+          <div class="text">Cannot connect to server</div>
           <div class="text">Error: ${error.message}</div>
-          <div class="text">Make sure your Render server is running!</div>
+          <div class="text">Try again in a few seconds</div>
         </div>
       `;
     }
   }
-}
-
-function mergeMessages(serverMessages) {
-  const merged = [...serverMessages];
-  
-  // Add pending messages that aren't in server yet
-  for (const [tempId, pendingMsg] of pendingMessages.entries()) {
-    if (pendingMsg.status === 'pending') {
-      const exists = merged.some(msg => 
-        msg.tempId === tempId || 
-        (msg.from === pendingMsg.from && msg.text === pendingMsg.text)
-      );
-      if (!exists) {
-        merged.push({...pendingMsg, tempId});
-      }
-    }
-  }
-  
-  return merged.sort((a, b) => {
-    const timeA = new Date(a.timestamp || 0);
-    const timeB = new Date(b.timestamp || 0);
-    return timeA - timeB;
-  });
 }
 
 function renderMessages(messages) {
@@ -859,27 +822,19 @@ function renderMessages(messages) {
     
     const isMine = msg.from === currentUser;
     const isSystem = msg.from === 'system';
-    const isPending = msg.status === 'pending' || msg.tempId;
-    const isFailed = msg.status === 'error';
     
     let className = 'message';
     if (isMine) className += ' mine';
     if (isSystem) className += ' system';
-    if (isPending) className += ' pending';
-    if (isFailed) className += ' error';
     
     const sender = isSystem ? 'System' : (msg.from || 'Unknown');
     const text = msg.text || '';
-    
-    let statusText = '';
-    if (isPending) statusText = ' (Sending...)';
-    if (isFailed) statusText = ' (Failed)';
     
     return `
       <div class="${className}">
         <div class="text">${escapeHtml(text)}</div>
         <div class="meta">
-          <span class="sender">${escapeHtml(sender)}${statusText}</span>
+          <span class="sender">${escapeHtml(sender)}</span>
           <span class="time">${gpcFormatted}</span>
         </div>
       </div>
@@ -894,7 +849,7 @@ function renderMessages(messages) {
 }
 
 /* ===============================
-   SEND MESSAGE - ULTIMATE INSTANT FIX!
+   SEND MESSAGE - SIMPLE WORKING VERSION
 =============================== */
 async function sendMessage() {
   if (!currentUser) {
@@ -912,34 +867,11 @@ async function sendMessage() {
     return;
   }
   
-  // Create temporary message with unique ID
-  const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const tempMessage = {
-    tempId: tempId,
-    from: currentUser,
-    text: text,
-    timestamp: new Date().toISOString(),
-    status: 'pending'
-  };
-  
-  // Add to pending map
-  pendingMessages.set(tempId, {...tempMessage});
-  
-  // INSTANT FEEDBACK: Show message immediately
-  currentMessages.push(tempMessage);
-  renderMessages(currentMessages);
-  
-  // Clear input and refocus
   input.value = '';
-  input.focus();
+  input.disabled = true;
   
-  // Send to server in background
-  sendToServer(tempId, currentUser, text);
-}
-
-async function sendToServer(tempId, from, text) {
   try {
-    console.log(`Sending to server: ${SERVER}/messages`);
+    console.log(`Sending to: ${SERVER}/messages`);
     
     const response = await fetch(`${SERVER}/messages`, {
       method: "POST",
@@ -947,49 +879,39 @@ async function sendToServer(tempId, from, text) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        from: from,
+        from: currentUser,
         text: text
       })
     });
-    
-    console.log(`Server response status: ${response.status}`);
     
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`Failed to send: ${response.status} ${errorText}`);
     }
     
-    const result = await response.json();
-    console.log("Server response:", result);
+    const messages = await response.json();
+    console.log("Send successful, got", messages.length, "messages");
     
-    // Update pending message status
-    const pendingMsg = pendingMessages.get(tempId);
-    if (pendingMsg) {
-      pendingMsg.status = 'sent';
-      pendingMessages.set(tempId, pendingMsg);
-    }
-    
+    // Update with server response
+    currentMessages = messages;
+    renderMessages(messages);
     showConnectionSuccess('Message sent!');
     
-    // Force reload to sync with server
-    setTimeout(() => {
-      loadMessages();
-    }, 500);
-    
-  } catch (error) {
-    console.error("Failed to send message to server:", error);
-    
-    // Mark as failed
-    const pendingMsg = pendingMessages.get(tempId);
-    if (pendingMsg) {
-      pendingMsg.status = 'error';
-      pendingMessages.set(tempId, pendingMsg);
+    // Update message count
+    const messageCountEl = document.getElementById('message-count');
+    if (messageCountEl) {
+      messageCountEl.textContent = ` • ${messages.length} message${messages.length !== 1 ? 's' : ''}`;
     }
     
+  } catch (error) {
+    console.error("Failed to send message:", error);
     showConnectionError(`Failed to send: ${error.message}`);
     
-    // Update display
-    renderMessages(currentMessages);
+    // Restore the text
+    input.value = text;
+  } finally {
+    input.disabled = false;
+    input.focus();
   }
 }
 
@@ -1043,7 +965,6 @@ async function debugServerResponse() {
   debugContent += `Server URL: ${SERVER}\n`;
   debugContent += `Current User: ${currentUser || 'Not set'}\n`;
   debugContent += `Current Messages: ${currentMessages.length}\n`;
-  debugContent += `Pending Messages: ${pendingMessages.size}\n`;
   debugContent += "\n--- Server Tests ---\n\n";
   
   try {
@@ -1088,13 +1009,13 @@ async function debugServerResponse() {
     }
     
     debugContent += "\n--- Frontend State ---\n";
-    debugContent += `Message Display: INSTANT FEEDBACK ENABLED ✓\n`;
-    debugContent += `Server returns array: ${Array.isArray(postData) ? "YES ✓" : "NO ✗ (but frontend handles it)"}\n`;
+    debugContent += `Server returns array: ${Array.isArray(postData) ? "YES ✓" : "NO ✗"}\n`;
     debugContent += `Server is working: ${getResponse.ok && postResponse.ok ? "YES ✓" : "NO ✗"}\n`;
+    debugContent += `Real-time updates: ENABLED ✓\n`;
     
-    if (!Array.isArray(postData)) {
-      debugContent += "\n⚠️  NOTE: Server returns object, not array!\n";
-      debugContent += "Frontend handles this with instant feedback + background sync.\n";
+    if (Array.isArray(postData)) {
+      debugContent += "\n✅ Server is working CORRECTLY!\n";
+      debugContent += "Your chat should work perfectly.\n";
     }
     
     showDebugModal(debugContent);
