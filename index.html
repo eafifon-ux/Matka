@@ -64,7 +64,6 @@ h1 {
   padding: 20px;
   border-radius: 10px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-  display: block; /* Changed from none */
 }
 
 #user-setup h3 {
@@ -111,7 +110,7 @@ h1 {
   border-radius: 10px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   overflow: hidden;
-  display: none; /* Hidden until username is set */
+  display: none;
 }
 
 #chat-header {
@@ -155,6 +154,15 @@ h1 {
   background: #e8f0ff;
   border-left-color: #4d94ff;
   margin-left: 20px;
+}
+
+.message.system {
+  background: #fff4e6;
+  border-left-color: #ffa726;
+  text-align: center;
+  font-style: italic;
+  font-size: 0.9em;
+  padding: 8px 15px;
 }
 
 .message .text {
@@ -244,6 +252,13 @@ h1 {
 .status-disconnected {
   background: #F44336;
 }
+
+.error-message {
+  color: #f44336;
+  font-size: 0.9em;
+  margin-top: 5px;
+  display: none;
+}
 </style>
 </head>
 
@@ -262,8 +277,9 @@ h1 {
 
 <div id="user-setup">
   <h3>Enter Your Name</h3>
-  <input type="text" id="username-input" placeholder="What's your name?" value="User" />
+  <input type="text" id="username-input" placeholder="What's your name?" />
   <button id="set-username-btn" onclick="setUsername()">Start Chatting</button>
+  <div id="setup-error" class="error-message"></div>
   <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
     <strong>How to chat with friends:</strong><br>
     1. Enter your name above<br>
@@ -276,12 +292,12 @@ h1 {
 <div id="chat-container">
   <div id="chat-header">
     <h3>Matka Messaging</h3>
-    <div id="user-display">You</div>
+    <div>You: <span id="user-display"></span></div>
   </div>
   
   <div id="messages">
     <div class="empty-state" id="empty-state">
-      No messages yet. Send your first message!
+      Loading messages...
     </div>
   </div>
   
@@ -440,10 +456,12 @@ function updateTopBar() {
 
 function setUsername() {
   const input = document.getElementById('username-input');
+  const errorDiv = document.getElementById('setup-error');
   const username = input.value.trim();
   
   if (!username) {
-    alert('Please enter a name');
+    errorDiv.textContent = 'Please enter a name';
+    errorDiv.style.display = 'block';
     return;
   }
   
@@ -477,7 +495,7 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function updateStatus(status, message = '') {
+function updateStatus(status) {
   const indicator = document.getElementById('status-indicator');
   indicator.className = 'status-indicator status-' + status;
   
@@ -494,8 +512,8 @@ async function loadMessages() {
   if (!currentUser) return;
   
   try {
-    // Load all messages from server
-    const response = await fetch(`${SERVER}/messages`, {
+    // Load messages from server with user filter
+    const response = await fetch(`${SERVER}/messages?user=${encodeURIComponent(currentUser)}`, {
       cache: "no-store",
       headers: {
         'Accept': 'application/json'
@@ -506,15 +524,7 @@ async function loadMessages() {
       throw new Error(`Server error: ${response.status}`);
     }
     
-    const data = await response.json();
-    
-    // Handle different response formats
-    let messages = [];
-    if (Array.isArray(data)) {
-      messages = data;
-    } else if (data && typeof data === 'object') {
-      messages = data.messages || data.data || [];
-    }
+    const messages = await response.json();
     
     // Update if messages changed
     if (JSON.stringify(messages) !== JSON.stringify(currentMessages)) {
@@ -531,11 +541,13 @@ async function loadMessages() {
     console.error("Failed to load messages:", error);
     updateStatus('disconnected');
     
-    // Only show error if we have no messages
-    if (currentMessages.length === 0) {
-      const emptyState = document.getElementById('empty-state');
-      emptyState.textContent = 'Connecting to server...';
-    }
+    // Show error in messages area
+    const container = document.getElementById("messages");
+    container.innerHTML = `
+      <div class="message system">
+        <div class="text">Cannot connect to server: ${error.message}</div>
+      </div>
+    `;
   }
 }
 
@@ -551,17 +563,30 @@ function renderMessages(messages) {
   
   emptyState.style.display = 'none';
   
-  // Sort messages by time (oldest to newest)
-  messages.sort((a, b) => new Date(a.time || 0) - new Date(b.time || 0));
+  // Sort messages by timestamp (oldest to newest)
+  messages.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
   
   container.innerHTML = messages.map(msg => {
-    const date = new Date(msg.time || Date.now());
+    const date = new Date(msg.timestamp || Date.now());
     const days = GPC.daysFromGregorian(date);
     const gpcDate = GPC.gpcFromDays(days);
     const gpcFormatted = formatGPC(gpcDate);
     
-    // Determine if message is from current user
+    // Determine if message is from current user or system
     const isMine = msg.from === currentUser;
+    const isSystem = msg.from === 'system';
+    
+    if (isSystem) {
+      return `
+        <div class="message system">
+          <div class="text">${escapeHtml(msg.text || '')}</div>
+          <div class="meta">
+            <span class="sender">System</span>
+            <span class="time">${gpcFormatted}</span>
+          </div>
+        </div>
+      `;
+    }
     
     return `
       <div class="message ${isMine ? 'mine' : ''}">
@@ -591,26 +616,11 @@ async function sendMessage() {
   
   if (!text) return;
   
-  // Add temporary local message (for instant feedback)
-  const tempId = Date.now();
-  const tempMsg = {
-    id: tempId,
-    from: currentUser,
-    text: text,
-    time: new Date().toISOString(),
-    pending: true
-  };
-  
-  // Add to current messages
-  currentMessages.push(tempMsg);
-  renderMessages(currentMessages);
-  
-  // Clear input
+  // Clear input immediately
   input.value = '';
-  input.focus();
   
   try {
-    // Send to server
+    // Send to server (no temp message - server responds fast)
     const response = await fetch(`${SERVER}/messages`, {
       method: "POST",
       headers: {
@@ -619,34 +629,36 @@ async function sendMessage() {
       body: JSON.stringify({
         from: currentUser,
         text: text,
-        time: new Date().toISOString()
+        to: "all"  // Send to everyone
       })
     });
     
     if (!response.ok) {
-      throw new Error(`Send failed: ${response.status}`);
+      const error = await response.json();
+      throw new Error(error.error || `Send failed: ${response.status}`);
     }
     
-    // Success! Remove temp message and reload from server
-    const tempIndex = currentMessages.findIndex(m => m.id === tempId);
-    if (tempIndex > -1) {
-      currentMessages.splice(tempIndex, 1);
-    }
-    
-    // Reload all messages (including the one we just sent)
+    // Reload messages to show the new one
     await loadMessages();
     
   } catch (error) {
     console.error("Failed to send message:", error);
     
-    // Mark the temp message as failed
-    const failedIndex = currentMessages.findIndex(m => m.id === tempId);
-    if (failedIndex > -1) {
-      currentMessages[failedIndex].failed = true;
-      currentMessages[failedIndex].text = `${text} (failed to send)`;
-      renderMessages(currentMessages);
-    }
+    // Show error message
+    const container = document.getElementById("messages");
+    const errorMsg = document.createElement('div');
+    errorMsg.className = 'message system';
+    errorMsg.innerHTML = `
+      <div class="text">Failed to send: ${escapeHtml(error.message)}</div>
+    `;
+    container.appendChild(errorMsg);
+    
+    // Put the text back in input so user can try again
+    input.value = text;
   }
+  
+  // Keep focus on input
+  input.focus();
 }
 
 /* ===============================
@@ -656,10 +668,10 @@ async function sendMessage() {
 function handleEnterKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    if (currentUser) {
-      sendMessage();
-    } else {
+    if (document.getElementById('user-setup').style.display !== 'none') {
       setUsername();
+    } else {
+      sendMessage();
     }
   }
 }
@@ -687,12 +699,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Set up enter key
+  // Set up enter key for inputs
   document.getElementById("username-input").addEventListener("keypress", handleEnterKey);
   document.getElementById("message-input").addEventListener("keypress", handleEnterKey);
-  
-  // Set up send button
-  document.getElementById("send-btn").addEventListener("click", sendMessage);
   
   // Initial load
   updateTopBar();
