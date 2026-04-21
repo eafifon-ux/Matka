@@ -1,114 +1,338 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Matka Mail</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Matka Mail</title>
 
-  <link rel="stylesheet" href="style.css">
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #f5f7fb;
+  padding: 20px;
+}
+
+h1 { text-align: center; }
+
+#gpc-display {
+  text-align: center;
+  font-size: 1.4em;
+  font-weight: bold;
+  padding: 10px;
+  background: rgba(30,108,255,0.1);
+  border-radius: 10px;
+  margin-bottom: 15px;
+}
+
+#emails {
+  max-width: 600px;
+  margin: auto;
+}
+
+.email {
+  background: white;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.subject { font-weight: bold; }
+
+.meta { font-size: 0.9em; color: gray; }
+
+#controls {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+#controls button {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid #aac7ff;
+  background: white;
+  cursor: pointer;
+}
+
+#controls button.active {
+  background: #1e6cff;
+  color: white;
+}
+</style>
 </head>
 
 <body>
 
-  <div class="app">
+<h1>Matka Mail</h1>
 
-    <h1>Matka Mail</h1>
+<div id="gpc-display"></div>
 
-    <!-- CONNECT SCREEN -->
-    <div id="connect-screen" class="screen">
-      <h2>Connect your account</h2>
+<div id="controls">
+  <button data-mode="DOY" class="active">DOY</button>
+  <button data-mode="DOS">DOS</button>
+  <button data-mode="DOM">DOM</button>
+  <button id="heptad-btn">Heptad</button>
+</div>
 
-      <div class="providers">
-        <button onclick="connect('gmail')">Gmail</button>
-        <button onclick="connect('outlook')">Outlook</button>
-        <button onclick="connect('zoho')">Zoho</button>
-      </div>
-    </div>
+<div id="emails"></div>
 
-    <!-- MAIN APP -->
-    <div id="main-app" style="display:none;">
+<script>
+/* ===============================
+   GPC ENGINE (EZDates LOGIC)
+=============================== */
 
-      <!-- GPC DISPLAY (IMPORTANT - DO NOT REMOVE) -->
-      <div id="gpc-display"></div>
+const GPC = {
+  epochUTC: Date.UTC(1982, 2, 24), // March 24, 1982
+  epochYear: 5979,
+  weekEmojis: ['🟠','🟤','🌺','🌏','🟢','🔵','🟣'],
+  
+  // ♣ ♦ ♥ ♠ as CODE POINTS (never HTML)
+  suitCodes: [0x2663, 0x2666, 0x2665, 0x2660],
+  heptads: Object.create(null),
+  
+  // Initialize heptads data structure
+  initHeptads() {
+    const starts = [
+      1,8,15,22,31,38,45,52,61,68,75,82,89,
+      92,99,106,113,122,129,136,143,152,159,166,173,180,
+      183,190,197,204,213,220,227,234,243,250,257,264,271,
+      274,281,288,295,304,311,318,325,334,341,348,355,362
+    ];
 
-      <!-- CONTROLS -->
-      <div id="controls">
-        <button data-mode="DOY" class="active">DOY</button>
-        <button data-mode="DOS">DOS</button>
-        <button data-mode="DOM">DOM</button>
-        <button id="heptad-btn">Heptad</button>
-      </div>
+    let i = 0;
+    for (let s = 0; s < 4; s++) {
+      for (let w = 1; w <= 13; w++) {
+        const long = (w <= 4 || w === 8 || w === 12);
+        const len = long ? 9 : 7;
+        for (let d = 0; d < len; d++) {
+          const doy = starts[i] + d;
+          if (doy <= 364) {
+            this.heptads[doy] = { 
+              suit: this.suitCodes[s], 
+              week: w 
+            };
+          }
+        }
+        i++;
+      }
+    }
+  },
 
-      <!-- COMPOSER -->
-      <div id="composer">
-        <h3>New Message</h3>
+  // Days from Gregorian date (EZDates method)
+  daysFromGregorian(d) {
+    return Math.floor((d.getTime() - this.epochUTC) / 86400000);
+  },
 
-        <input id="to" placeholder="To" /><br><br>
-        <input id="subject" placeholder="Subject" /><br><br>
-        <textarea id="body" placeholder="Write your message..."></textarea><br><br>
+  // Modular arithmetic helper
+  mod(a, b) {
+    return ((a % b) + b) % b;
+  },
 
-        <button onclick="sendEmail()">Send</button>
-      </div>
+  // Calculate leap weeks for a given year offset
+  leapWeeks(r) {
+    let l = 0;
+    if (this.mod(r, 7) >= 6) l += 7;
+    if (this.mod(r, 49) >= 48) l += 7;
+    if (this.mod(r + 29, 70) === 0) l += 7;
+    return l;
+  },
 
-      <!-- INBOX -->
-      <div id="inbox-section">
-        <h3>Inbox</h3>
-        <div id="emails"></div>
-      </div>
+  // Convert days from epoch to GPC year and DOY
+  gpcFromDays(days) {
+    const cycleYears = 490;
+    const cycleDays = 178969;
+    let y = this.epochYear;
 
-    </div>
+    // Jump whole cycles for efficiency
+    if (days >= cycleDays || days <= -cycleDays) {
+      const cycles = Math.trunc(days / cycleDays);
+      y += cycles * cycleYears;
+      days -= cycles * cycleDays;
+    }
 
-  </div>
-
-  <!-- ========================= -->
-  <!-- GPC ENGINE (LOAD FIRST) -->
-  <!-- ========================= -->
-  <script src="game.js"></script>
-
-  <!-- ========================= -->
-  <!-- EMAIL SYSTEM -->
-  <!-- ========================= -->
-  <script>
-    let retryDelay = 2000;
-
-    async function loadEmails() {
-      try {
-        const res = await fetch("https://matka-3.onrender.com/emails", {
-          cache: "no-store"
-        });
-
-        const data = await res.json();
-
-        const container = document.getElementById("emails");
-
-        container.innerHTML = data.map(e => `
-          <div style="border:1px solid #ccc; margin:10px; padding:10px;">
-            <b>${e.subject}</b><br/>
-            <small>From: ${e.from}</small><br/>
-            <small style="color:gray;">
-              ${e.date ? new Date(e.date).toLocaleString() : ""}
-            </small><br/>
-            <p>${e.body}</p>
-          </div>
-        `).join("");
-
-        retryDelay = 2000;
-
-      } catch (err) {
-        console.log("Email fetch retry...", err);
-
-        retryDelay = Math.min(retryDelay * 1.5, 10000);
-
-        setTimeout(loadEmails, retryDelay);
-        return;
+    // Finish with normal stepping
+    if (days >= 0) {
+      while (true) {
+        const r = y - this.epochYear;
+        const yearLen = 364 + this.leapWeeks(r);
+        if (days < yearLen) break;
+        days -= yearLen;
+        y++;
+      }
+    } else {
+      while (days < 0) {
+        y--;
+        const r = y - this.epochYear;
+        const yearLen = 364 + this.leapWeeks(r);
+        days += yearLen;
       }
     }
 
-    window.addEventListener("load", () => {
-      loadEmails();
-      setInterval(loadEmails, 5000);
+    return { year: y, doy: days + 1 };
+  },
+
+  // Calculate days from GPC year and DOY to epoch days
+  daysFromGPC(year, doy) {
+    let totalDays = 0;
+    let currentYear = this.epochYear;
+    
+    // Handle negative years if needed
+    if (year < currentYear) {
+      while (currentYear > year) {
+        currentYear--;
+        const r = currentYear - this.epochYear;
+        const yearLen = 364 + this.leapWeeks(r);
+        totalDays -= yearLen;
+      }
+    } else {
+      while (currentYear < year) {
+        const r = currentYear - this.epochYear;
+        const yearLen = 364 + this.leapWeeks(r);
+        totalDays += yearLen;
+        currentYear++;
+      }
+    }
+    
+    // Add the day-of-year (minus 1 since doy is 1-based)
+    return totalDays + (doy - 1);
+  }
+};
+
+let mode = "DOY";
+let heptad = false;
+
+// Initialize heptads data
+GPC.initHeptads();
+
+/* ===============================
+   FORMATTER FUNCTIONS
+=============================== */
+
+function formatGPC(gpcDate) {
+  const { year, doy } = gpcDate;
+  const emoji = GPC.weekEmojis[(doy - 1) % 7];
+  const heptadInfo = GPC.heptads[doy] || { suit: 0x2663, week: 1 };
+  const suitChar = String.fromCodePoint(heptadInfo.suit);
+  
+  let core = "";
+  
+  if (mode === "DOY") {
+    core = String(doy).padStart(3, "0");
+  } 
+  else if (mode === "DOS") {
+    const season = Math.floor((doy - 1) / 91) + 1;
+    const dayInSeason = ((doy - 1) % 91) + 1;
+    core = `Q${season}-${String(dayInSeason).padStart(2, "0")}`;
+  } 
+  else if (mode === "DOM") {
+    const monthLengths = [30, 30, 31, 30, 30, 31, 30, 30, 31, 30, 30, 31];
+    let remaining = doy;
+    let month = 0;
+    
+    for (let i = 0; i < monthLengths.length; i++) {
+      if (remaining <= monthLengths[i]) {
+        month = i + 1;
+        break;
+      }
+      remaining -= monthLengths[i];
+    }
+    
+    core = `${String(month).padStart(2, "0")}.${String(remaining).padStart(2, "0")}`;
+  }
+
+  // HEPTAD MODE: Show format + heptad (no year)
+  if (heptad) {
+    return `${emoji} ${core} ${suitChar}${heptadInfo.week}`;
+  }
+
+  // NORMAL MODE: Show year + format
+  return `${emoji} ${year}.${core}`;
+}
+
+/* ===============================
+   TOP BAR DISPLAY
+=============================== */
+
+function updateTopBar() {
+  const days = GPC.daysFromGregorian(new Date());
+  const gpcDate = GPC.gpcFromDays(days);
+  document.getElementById("gpc-display").textContent = formatGPC(gpcDate);
+}
+
+/* ===============================
+   EMAIL LOADER
+=============================== */
+
+async function loadEmails() {
+  try {
+    const res = await fetch("https://matka-3.onrender.com/emails", {
+      cache: "no-store"
     });
-  </script>
+
+    const data = await res.json();
+
+    document.getElementById("emails").innerHTML = data.map(e => {
+      // Parse email date and convert to GPC
+      const date = new Date(e.date);
+      const days = GPC.daysFromGregorian(date);
+      const gpcDate = GPC.gpcFromDays(days);
+      const gpc = formatGPC(gpcDate);
+
+      return `
+        <div class="email">
+          <div class="subject">${e.subject || "No subject"}</div>
+          <div class="meta">${e.from || "unknown"}</div>
+          <div class="meta">${gpc}</div>
+          <p>${e.body || ""}</p>
+        </div>
+      `;
+    }).join("");
+
+  } catch (err) {
+    console.log("Email load error:", err);
+    document.getElementById("emails").innerHTML = 
+      `<div class="email"><p>Unable to load emails. Please try again later.</p></div>`;
+  }
+}
+
+/* ===============================
+   CONTROLS
+=============================== */
+
+document.querySelectorAll("[data-mode]").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    mode = btn.dataset.mode;
+    updateTopBar();
+    loadEmails();
+  };
+});
+
+document.getElementById("heptad-btn").onclick = () => {
+  heptad = !heptad;
+  document.getElementById("heptad-btn").classList.toggle("active", heptad);
+  updateTopBar();
+  loadEmails();
+};
+
+/* ===============================
+   INITIALIZATION
+=============================== */
+
+window.addEventListener("load", () => {
+  updateTopBar();
+  loadEmails();
+
+  // Update display every 10 seconds
+  setInterval(updateTopBar, 10000);
+  
+  // Refresh emails every 5 seconds
+  setInterval(loadEmails, 5000);
+});
+</script>
 
 </body>
 </html>
