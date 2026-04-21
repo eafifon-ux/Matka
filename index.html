@@ -813,56 +813,46 @@ async function loadMessages() {
 
 function renderMessages(messages) {
   const container = document.getElementById("messages");
-  const emptyState = document.getElementById("empty-state");
+  if (!container) return;
   
-  if (!container || !emptyState) return;
+  // Always rebuild completely
+  container.innerHTML = '';
   
   if (!messages || messages.length === 0) {
-    emptyState.style.display = 'block';
-    container.innerHTML = '';
+    container.innerHTML = '<div class="empty-state">No messages yet. Send your first message!</div>';
     return;
   }
   
-  emptyState.style.display = 'none';
-  
-  // CRITICAL FIX: Clear container first to force repaint
-  container.innerHTML = '';
-  
-  const html = messages.map(msg => {
+  // Use the EXACT pattern that worked in console
+  messages.forEach(msg => {
+    const div = document.createElement('div');
+    
+    // Add proper CSS classes
+    div.className = 'message';
+    if (msg.from === currentUser) div.className += ' mine';
+    if (msg.from === 'system') div.className += ' system';
+    
+    // Add formatted content
     const date = new Date(msg.timestamp || Date.now());
     const days = GPC.daysFromGregorian(date);
     const gpcDate = GPC.gpcFromDays(days);
     const gpcFormatted = formatGPC(gpcDate);
     
-    const isMine = msg.from === currentUser;
-    const isSystem = msg.from === 'system';
-    
-    let className = 'message';
-    if (isMine) className += ' mine';
-    if (isSystem) className += ' system';
-    
-    const sender = isSystem ? 'System' : (msg.from || 'Unknown');
-    const text = msg.text || '';
-    
-    return `
-      <div class="${className}">
-        <div class="text">${escapeHtml(text)}</div>
-        <div class="meta">
-          <span class="sender">${escapeHtml(sender)}</span>
-          <span class="time">${gpcFormatted}</span>
-        </div>
+    div.innerHTML = `
+      <div class="text">${escapeHtml(msg.text || '')}</div>
+      <div class="meta">
+        <span class="sender">${escapeHtml(msg.from || 'Unknown')}</span>
+        <span class="time">${gpcFormatted}</span>
       </div>
     `;
-  }).join('');
+    
+    container.appendChild(div);
+  });
   
-  container.innerHTML = html;
-  
-  setTimeout(() => {
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-    }
-  }, 10);
+  // Scroll
+  setTimeout(() => container.scrollTop = container.scrollHeight, 10);
 }
+
 
 /* ===============================
    SEND MESSAGE - ULTIMATE FIX!
