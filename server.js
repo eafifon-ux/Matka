@@ -1,59 +1,45 @@
-const express = require("express");
-const cors = require("cors");
+const express = require('express');
+const cors = require('cors');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-/* ===============================
-   MATKA MESSAGE STORE (IN MEMORY)
-=============================== */
-
+// Store messages in memory
 let messages = [
   {
     id: 1,
     from: "system",
-    to: "all",
     text: "Welcome to Matka Messaging!",
     timestamp: new Date().toISOString()
   }
 ];
 
-/* ===============================
-   GET ALL MESSAGES
-=============================== */
-
-app.get("/messages", (req, res) => {
-  console.log("GET /messages - returning", messages.length, "messages");
+// Get all messages
+app.get('/messages', (req, res) => {
+  console.log('GET /messages - returning', messages.length, 'messages');
   res.json(messages);
 });
 
-/* ===============================
-   SEND MESSAGE
-=============================== */
-
-app.post("/messages", (req, res) => {
+// Send a message
+app.post('/messages', (req, res) => {
+  console.log('POST /messages - body:', req.body);
+  
   const { from, text } = req.body;
   
-  console.log("POST /messages - from:", from, "text:", text);
-
   if (!from || !text) {
-    return res.status(400).json({
-      error: "from and text are required"
-    });
+    return res.status(400).json({ error: 'from and text are required' });
   }
-
+  
   const newMessage = {
     id: messages.length + 1,
     from,
-    to: "all",
     text,
     timestamp: new Date().toISOString()
   };
-
+  
   messages.push(newMessage);
-
-  console.log("Added message, total:", messages.length);
+  console.log('Added message. Total:', messages.length);
   
   res.json({
     success: true,
@@ -61,40 +47,49 @@ app.post("/messages", (req, res) => {
   });
 });
 
-/* ===============================
-   DELETE (for testing)
-=============================== */
+// Serve static files (for your HTML)
+app.use(express.static('public'));
 
-app.delete("/messages", (req, res) => {
-  messages = [];
-  res.json({ success: true, cleared: true });
-});
-
-/* ===============================
-   SERVE STATIC FILES (HTML)
-=============================== */
-
-app.use(express.static('.')); // This serves index.html
-
-/* ===============================
-   HEALTH CHECK
-=============================== */
-
-app.get("/health", (req, res) => {
-  res.json({ 
-    status: "healthy",
-    messages: messages.length,
-    users: [...new Set(messages.map(m => m.from))]
+// Health check
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    messageCount: messages.length
   });
 });
 
-/* ===============================
-   START SERVER
-=============================== */
+// Root route
+app.get('/', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Matka Server</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        h1 { color: #1e6cff; }
+        .endpoint { background: #f5f7fb; padding: 10px; border-radius: 5px; margin: 10px 0; }
+      </style>
+    </head>
+    <body>
+      <h1>✅ Matka Server is Running!</h1>
+      <p>Your chat server is ready to use.</p>
+      <div class="endpoint">
+        <strong>Endpoints:</strong>
+        <ul>
+          <li><code>GET /messages</code> - Get all messages</li>
+          <li><code>POST /messages</code> - Send a message</li>
+          <li><code>GET /health</code> - Health check</li>
+        </ul>
+      </div>
+      <p>Go to <a href="/index.html">/index.html</a> for the chat interface.</p>
+    </body>
+    </html>
+  `);
+});
 
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
-  console.log("🚀 Matka Messaging Server running on port", PORT);
-  console.log(`📁 Serving files from: ${__dirname}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
