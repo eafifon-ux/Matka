@@ -57,6 +57,53 @@ h1 {
   border-color: #1e6cff;
 }
 
+#user-setup {
+  max-width: 600px;
+  margin: 0 auto 20px;
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  display: block; /* Changed from none */
+}
+
+#user-setup h3 {
+  margin-top: 0;
+  color: #1e6cff;
+}
+
+#username-input {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1em;
+  margin-bottom: 15px;
+  box-sizing: border-box;
+}
+
+#username-input:focus {
+  outline: none;
+  border-color: #1e6cff;
+  box-shadow: 0 0 0 2px rgba(30,108,255,0.1);
+}
+
+#set-username-btn {
+  width: 100%;
+  padding: 12px;
+  background: #1e6cff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 1em;
+}
+
+#set-username-btn:hover {
+  background: #0a5ae0;
+}
+
 #chat-container {
   max-width: 600px;
   margin: 0 auto;
@@ -64,10 +111,32 @@ h1 {
   border-radius: 10px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   overflow: hidden;
+  display: none; /* Hidden until username is set */
+}
+
+#chat-header {
+  padding: 15px;
+  background: #1e6cff;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#chat-header h3 {
+  margin: 0;
+  font-size: 1.2em;
+}
+
+#user-display {
+  font-weight: bold;
+  background: rgba(255,255,255,0.2);
+  padding: 4px 10px;
+  border-radius: 4px;
 }
 
 #messages {
-  height: 400px;
+  height: 350px;
   overflow-y: auto;
   padding: 15px;
   display: flex;
@@ -86,15 +155,6 @@ h1 {
   background: #e8f0ff;
   border-left-color: #4d94ff;
   margin-left: 20px;
-}
-
-.message.system {
-  background: #fff4e6;
-  border-left-color: #ffa726;
-  text-align: center;
-  font-style: italic;
-  font-size: 0.9em;
-  padding: 8px 15px;
 }
 
 .message .text {
@@ -165,13 +225,6 @@ h1 {
   padding: 5px;
 }
 
-.loading {
-  text-align: center;
-  color: #888;
-  padding: 20px;
-  font-style: italic;
-}
-
 .status-indicator {
   display: inline-block;
   width: 8px;
@@ -207,13 +260,28 @@ h1 {
   <button id="heptad-btn">Heptad</button>
 </div>
 
+<div id="user-setup">
+  <h3>Enter Your Name</h3>
+  <input type="text" id="username-input" placeholder="What's your name?" value="User" />
+  <button id="set-username-btn" onclick="setUsername()">Start Chatting</button>
+  <p style="margin-top: 15px; color: #666; font-size: 0.9em;">
+    <strong>How to chat with friends:</strong><br>
+    1. Enter your name above<br>
+    2. Share this link with friends<br>
+    3. They enter their name<br>
+    4. You'll see each other's messages instantly!
+  </p>
+</div>
+
 <div id="chat-container">
+  <div id="chat-header">
+    <h3>Matka Messaging</h3>
+    <div id="user-display">You</div>
+  </div>
+  
   <div id="messages">
     <div class="empty-state" id="empty-state">
       No messages yet. Send your first message!
-    </div>
-    <div class="loading" id="loading" style="display: none;">
-      Loading messages...
     </div>
   </div>
   
@@ -226,7 +294,7 @@ h1 {
 <div class="debug-info">
   <span id="status-indicator" class="status-indicator status-connecting"></span>
   Connected to: <span id="server-status">https://matka-3.onrender.com</span>
-  <span id="message-count"> • 0 messages</span>
+  <span id="message-count"> • Loading...</span>
 </div>
 
 <script>
@@ -325,8 +393,7 @@ let heptad = false;
 const SERVER = "https://matka-3.onrender.com";
 let currentMessages = [];
 let messageInterval = null;
-let lastMessageId = null;
-let connectionStatus = 'connecting';
+let currentUser = '';
 
 GPC.initHeptads();
 
@@ -368,7 +435,40 @@ function updateTopBar() {
 }
 
 /* ===============================
-   MESSAGE FUNCTIONS - UPDATED FOR BETTER RECEIVING
+   USER SETUP
+=============================== */
+
+function setUsername() {
+  const input = document.getElementById('username-input');
+  const username = input.value.trim();
+  
+  if (!username) {
+    alert('Please enter a name');
+    return;
+  }
+  
+  currentUser = username;
+  
+  // Update display
+  document.getElementById('user-display').textContent = currentUser;
+  
+  // Show chat, hide setup
+  document.getElementById('user-setup').style.display = 'none';
+  document.getElementById('chat-container').style.display = 'block';
+  
+  // Focus on message input
+  document.getElementById('message-input').focus();
+  
+  // Start loading messages
+  loadMessages();
+  
+  // Start auto-refresh
+  if (messageInterval) clearInterval(messageInterval);
+  messageInterval = setInterval(loadMessages, 2000);
+}
+
+/* ===============================
+   MESSAGE FUNCTIONS
 =============================== */
 
 function escapeHtml(text) {
@@ -377,8 +477,7 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-function updateStatus(status) {
-  connectionStatus = status;
+function updateStatus(status, message = '') {
   const indicator = document.getElementById('status-indicator');
   indicator.className = 'status-indicator status-' + status;
   
@@ -392,103 +491,50 @@ function updateStatus(status) {
 }
 
 async function loadMessages() {
-  const loadingEl = document.getElementById('loading');
-  const emptyState = document.getElementById('empty-state');
+  if (!currentUser) return;
   
   try {
-    loadingEl.style.display = 'block';
-    emptyState.style.display = 'none';
-    
-    // Try multiple endpoints - your server might use different structures
-    let data = null;
-    let response = null;
-    
-    try {
-      // Try the standard messages endpoint first
-      response = await fetch(`${SERVER}/messages`, {
-        cache: "no-store",
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        data = await response.json();
-        updateStatus('connected');
-      } else {
-        // Try alternative endpoint
-        response = await fetch(`${SERVER}/api/messages`, {
-          cache: "no-store",
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-        
-        if (response.ok) {
-          data = await response.json();
-          updateStatus('connected');
-        } else {
-          throw new Error(`Server error: ${response.status}`);
-        }
+    // Load all messages from server
+    const response = await fetch(`${SERVER}/messages`, {
+      cache: "no-store",
+      headers: {
+        'Accept': 'application/json'
       }
-    } catch (fetchError) {
-      // Try one more time with a different approach
-      try {
-        response = await fetch(`${SERVER}/`, {
-          cache: "no-store"
-        });
-        if (response.ok) {
-          // Server is up but endpoint might be different
-          data = [];
-          updateStatus('connected');
-          showSystemMessage('Server connected, but no messages endpoint found');
-        } else {
-          throw fetchError;
-        }
-      } catch (finalError) {
-        throw finalError;
-      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
     }
+    
+    const data = await response.json();
     
     // Handle different response formats
     let messages = [];
-    
     if (Array.isArray(data)) {
       messages = data;
     } else if (data && typeof data === 'object') {
-      // Try common property names
-      messages = data.messages || data.data || data.items || [];
+      messages = data.messages || data.data || [];
     }
     
-    // Check if messages actually changed
-    const messagesChanged = JSON.stringify(messages) !== JSON.stringify(currentMessages);
-    
-    if (messagesChanged) {
+    // Update if messages changed
+    if (JSON.stringify(messages) !== JSON.stringify(currentMessages)) {
       currentMessages = messages;
       renderMessages(messages);
+      updateStatus('connected');
       
       // Update message count
-      document.getElementById('message-count').textContent = ` • ${messages.length} message${messages.length !== 1 ? 's' : ''}`;
-      
-      // Store last message ID for polling
-      if (messages.length > 0) {
-        lastMessageId = messages[messages.length - 1].id || messages[messages.length - 1].time;
-      }
+      document.getElementById('message-count').textContent = 
+        ` • ${messages.length} message${messages.length !== 1 ? 's' : ''}`;
     }
-    
-    loadingEl.style.display = 'none';
     
   } catch (error) {
     console.error("Failed to load messages:", error);
-    loadingEl.style.display = 'none';
     updateStatus('disconnected');
     
+    // Only show error if we have no messages
     if (currentMessages.length === 0) {
-      emptyState.style.display = 'block';
-      emptyState.textContent = 'Cannot connect to server. Check your connection.';
-    } else {
-      // Show error but keep existing messages
-      showSystemMessage(`Connection lost: ${error.message}. Retrying...`);
+      const emptyState = document.getElementById('empty-state');
+      emptyState.textContent = 'Connecting to server...';
     }
   }
 }
@@ -515,10 +561,7 @@ function renderMessages(messages) {
     const gpcFormatted = formatGPC(gpcDate);
     
     // Determine if message is from current user
-    const isMine = msg.from === "user" || msg.from === "You" || 
-                  (typeof msg.from === 'string' && 
-                   (msg.from.toLowerCase().includes('you') || 
-                    msg.from.toLowerCase().includes('user')));
+    const isMine = msg.from === currentUser;
     
     return `
       <div class="message ${isMine ? 'mine' : ''}">
@@ -537,107 +580,71 @@ function renderMessages(messages) {
   }, 10);
 }
 
-function showSystemMessage(text) {
-  const container = document.getElementById("messages");
-  const messageDiv = document.createElement('div');
-  messageDiv.className = 'message system';
-  messageDiv.innerHTML = `
-    <div class="text">${escapeHtml(text)}</div>
-  `;
-  
-  // Remove any existing system messages
-  const existingSystem = container.querySelectorAll('.message.system');
-  existingSystem.forEach(el => el.remove());
-  
-  container.appendChild(messageDiv);
-  container.scrollTop = container.scrollHeight;
-}
-
 async function sendMessage() {
+  if (!currentUser) {
+    alert('Please enter your name first');
+    return;
+  }
+  
   const input = document.getElementById("message-input");
   const text = input.value.trim();
   
   if (!text) return;
   
-  // Add temporary local message
-  const days = GPC.daysFromGregorian(new Date());
-  const gpcDate = GPC.gpcFromDays(days);
-  const gpcFormatted = formatGPC(gpcDate);
-  
-  const container = document.getElementById("messages");
-  const emptyState = document.getElementById("empty-state");
-  emptyState.style.display = 'none';
-  
+  // Add temporary local message (for instant feedback)
   const tempId = Date.now();
   const tempMsg = {
     id: tempId,
-    from: "You",
+    from: currentUser,
     text: text,
     time: new Date().toISOString(),
     pending: true
   };
   
-  // Add temp message to current array
+  // Add to current messages
   currentMessages.push(tempMsg);
   renderMessages(currentMessages);
   
-  // Clear input and focus
+  // Clear input
   input.value = '';
   input.focus();
   
   try {
-    // Send to server - try different formats
-    const payload = {
-      from: "user",
-      text: text,
-      time: new Date().toISOString()
-    };
-    
-    let response = null;
-    
-    // Try POST to /messages first
-    try {
-      response = await fetch(`${SERVER}/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-    } catch (postError) {
-      // Try alternative endpoint
-      response = await fetch(`${SERVER}/api/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-    }
+    // Send to server
+    const response = await fetch(`${SERVER}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: currentUser,
+        text: text,
+        time: new Date().toISOString()
+      })
+    });
     
     if (!response.ok) {
       throw new Error(`Send failed: ${response.status}`);
     }
     
-    // Remove temp message
+    // Success! Remove temp message and reload from server
     const tempIndex = currentMessages.findIndex(m => m.id === tempId);
     if (tempIndex > -1) {
       currentMessages.splice(tempIndex, 1);
     }
     
-    // Reload all messages from server
+    // Reload all messages (including the one we just sent)
     await loadMessages();
     
   } catch (error) {
     console.error("Failed to send message:", error);
     
-    // Mark as failed but keep it visible
+    // Mark the temp message as failed
     const failedIndex = currentMessages.findIndex(m => m.id === tempId);
     if (failedIndex > -1) {
       currentMessages[failedIndex].failed = true;
       currentMessages[failedIndex].text = `${text} (failed to send)`;
       renderMessages(currentMessages);
-      showSystemMessage(`Failed to send: ${error.message}`);
     }
   }
 }
@@ -649,7 +656,11 @@ async function sendMessage() {
 function handleEnterKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    sendMessage();
+    if (currentUser) {
+      sendMessage();
+    } else {
+      setUsername();
+    }
   }
 }
 
@@ -661,7 +672,9 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.classList.add("active");
       mode = btn.dataset.mode;
       updateTopBar();
-      renderMessages(currentMessages);
+      if (currentUser) {
+        renderMessages(currentMessages);
+      }
     });
   });
 
@@ -669,10 +682,13 @@ document.addEventListener("DOMContentLoaded", () => {
     heptad = !heptad;
     document.getElementById("heptad-btn").classList.toggle("active", heptad);
     updateTopBar();
-    renderMessages(currentMessages);
+    if (currentUser) {
+      renderMessages(currentMessages);
+    }
   });
 
-  // Set up enter key for input
+  // Set up enter key
+  document.getElementById("username-input").addEventListener("keypress", handleEnterKey);
   document.getElementById("message-input").addEventListener("keypress", handleEnterKey);
   
   // Set up send button
@@ -680,16 +696,12 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Initial load
   updateTopBar();
-  loadMessages();
-  
-  // Auto-refresh messages every 2 seconds (faster for testing)
-  messageInterval = setInterval(loadMessages, 2000);
   
   // Update top bar every 10 seconds
   setInterval(updateTopBar, 10000);
   
-  // Focus input
-  document.getElementById("message-input").focus();
+  // Focus on username input
+  document.getElementById("username-input").focus();
 });
 
 // Clean up interval on page unload
