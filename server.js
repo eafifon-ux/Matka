@@ -1,21 +1,18 @@
-const express = require("express");
-const cors = require("cors");
-require("dotenv").config();
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-// ===============================
-// MIDDLEWARE - FIXED CORS!
-// ===============================
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+// CORS for Render
+app.use(cors());
 app.use(express.json());
 
-// Store messages in memory
+// Serve static files
+app.use(express.static('.'));
+
+// Simple in-memory storage
 let messages = [
   {
     id: 1,
@@ -25,20 +22,17 @@ let messages = [
   }
 ];
 
-// Get all messages
+// GET all messages
 app.get('/messages', (req, res) => {
-  console.log('GET /messages - returning', messages.length, 'messages');
   res.json(messages);
 });
 
-// Send a message - 🚨 FIXED VERSION 🚨
+// POST new message
 app.post('/messages', (req, res) => {
-  console.log('POST /messages - body:', req.body);
-  
   const { from, text } = req.body;
   
   if (!from || !text) {
-    return res.status(400).json({ error: 'from and text are required' });
+    return res.status(400).json({ error: 'Missing from or text' });
   }
   
   const newMessage = {
@@ -49,14 +43,10 @@ app.post('/messages', (req, res) => {
   };
   
   messages.push(newMessage);
-  console.log('Added message. Total:', messages.length);
   
-  // 🚨 CRITICAL FIX: Return ALL messages (not just success object)
-  res.json(messages);  // ← This is the fix!
+  // Return ALL messages (not just new one)
+  res.json(messages);
 });
-
-// Serve static files (optional)
-app.use(express.static('public'));
 
 // Health check
 app.get('/health', (req, res) => {
@@ -67,20 +57,12 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Root route
-app.get('/', (req, res) => {
-  res.json({
-    service: 'Matka Messaging Server',
-    version: '1.0.0',
-    status: 'running',
-    endpoints: {
-      messages: '/messages',
-      health: '/health'
-    }
-  });
+// Serve index.html for any other route
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Messages in memory: ${messages.length}`);
 });
