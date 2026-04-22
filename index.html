@@ -161,7 +161,14 @@ h1 {
 .message.mine {
   background: #e8f0ff;
   border-left-color: #4d94ff;
-  margin-left: 20px;
+  /* REMOVED: margin-left: 20px; - THIS WAS CAUSING THE BUG */
+  align-self: flex-end;
+  max-width: 85%;
+}
+
+.message.others {
+  align-self: flex-start;
+  max-width: 85%;
 }
 
 .message.system {
@@ -172,6 +179,8 @@ h1 {
   font-size: 0.9em;
   padding: 8px 15px;
   cursor: default;
+  align-self: center;
+  max-width: 90%;
 }
 
 .message.system:hover {
@@ -445,6 +454,7 @@ h1 {
   display: flex;
   gap: 10px;
   background: #fafbff;
+  flex-direction: column;
 }
 
 #message-input {
@@ -1025,6 +1035,13 @@ h1 {
   background: #fff4e6;
   color: #ff9800;
 }
+
+/* Input row */
+.input-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
 </style>
 </head>
 
@@ -1122,8 +1139,10 @@ h1 {
       </div>
       <button class="cancel-reply" title="Cancel reply">×</button>
     </div>
-    <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off" disabled />
-    <button id="send-btn">Send</button>
+    <div class="input-row">
+      <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off" disabled />
+      <button id="send-btn">Send</button>
+    </div>
   </div>
 </div>
 
@@ -2003,7 +2022,11 @@ function renderMessages(messages) {
     const isCurrentUser = fromField === currentUser;
     
     div.className = 'message';
-    if (isCurrentUser) div.className += ' mine';
+    if (isCurrentUser) {
+      div.className += ' mine';
+    } else if (fromField !== 'system') {
+      div.className += ' others';
+    }
     if (fromField === 'system') div.className += ' system';
     
     const date = new Date(timestampField);
@@ -2158,6 +2181,7 @@ function renderMessages(messages) {
     container.appendChild(div);
   });
   
+  // FIX FOR EDIT KEYBOARD DISAPPEARING - Focus on textarea when editing
   document.querySelectorAll('.save-edit-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const messageId = e.target.dataset.messageId;
@@ -2172,6 +2196,15 @@ function renderMessages(messages) {
       cancelMessageEdit(messageId);
     });
   });
+  
+  // FOCUS ON TEXTAREA WHEN EDITING
+  const editTextarea = document.querySelector('.message-edit-input');
+  if (editTextarea && currentlyEditingMessageId) {
+    setTimeout(() => {
+      editTextarea.focus();
+      editTextarea.setSelectionRange(editTextarea.value.length, editTextarea.value.length);
+    }, 10);
+  }
   
   setTimeout(() => container.scrollTop = container.scrollHeight, 10);
 }
