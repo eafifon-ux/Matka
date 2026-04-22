@@ -161,7 +161,6 @@ h1 {
 .message.mine {
   background: #e8f0ff;
   border-left-color: #4d94ff;
-  /* REMOVED: margin-left: 20px; - THIS WAS CAUSING THE BUG */
   align-self: flex-end;
   max-width: 85%;
 }
@@ -349,7 +348,7 @@ h1 {
   background: #f57c00;
 }
 
-/* Edit message form */
+/* Edit message form - NEW FIXED STYLES */
 .message-edit-form {
   display: none;
   margin-top: 10px;
@@ -364,6 +363,8 @@ h1 {
   margin-bottom: 8px;
   box-sizing: border-box;
   font-family: Arial, sans-serif;
+  resize: vertical;
+  min-height: 60px;
 }
 
 .message-edit-input:focus {
@@ -402,6 +403,93 @@ h1 {
 }
 
 .cancel-edit-btn:hover {
+  background: #757575;
+}
+
+/* Inline edit overlay - NEW FOR MOBILE FIX */
+.edit-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 5000;
+  display: none;
+  padding: 20px;
+}
+
+.edit-overlay-content {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.edit-overlay h4 {
+  margin-top: 0;
+  color: #1e6cff;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.edit-overlay-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #4d94ff;
+  border-radius: 6px;
+  font-size: 1em;
+  font-family: Arial, sans-serif;
+  margin: 15px 0;
+  resize: vertical;
+  min-height: 100px;
+  box-sizing: border-box;
+}
+
+.edit-overlay-textarea:focus {
+  outline: none;
+  border-color: #1e6cff;
+  box-shadow: 0 0 0 2px rgba(30,108,255,0.1);
+}
+
+.edit-overlay-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.edit-overlay-buttons button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  min-width: 80px;
+}
+
+.edit-overlay-save {
+  background: #4CAF50;
+  color: white;
+}
+
+.edit-overlay-save:hover {
+  background: #45a049;
+}
+
+.edit-overlay-cancel {
+  background: #9e9e9e;
+  color: white;
+}
+
+.edit-overlay-cancel:hover {
   background: #757575;
 }
 
@@ -1155,6 +1243,18 @@ h1 {
   <span id="password-status-indicator" class="password-status"></span>
 </div>
 
+<!-- NEW EDIT OVERLAY -->
+<div id="edit-overlay" class="edit-overlay">
+  <div class="edit-overlay-content">
+    <h4>Edit Message</h4>
+    <textarea id="edit-overlay-textarea" class="edit-overlay-textarea" placeholder="Edit your message..."></textarea>
+    <div class="edit-overlay-buttons">
+      <button id="edit-overlay-cancel" class="edit-overlay-cancel">Cancel</button>
+      <button id="edit-overlay-save" class="edit-overlay-save">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- COPY NOTIFICATION -->
 <div id="copy-notification" class="copy-notification">
   <span>✅ Copied to clipboard!</span>
@@ -1208,6 +1308,10 @@ let tempPasswordEnabled = false;
 let permPasswordEnabled = false;
 let tempPassword = "";
 let permPassword = "";
+
+// NEW: Edit overlay state
+let editingMessageId = null;
+let editingMessageOriginalText = "";
 
 // Load saved passwords from localStorage
 function loadPasswordSettings() {
@@ -1408,7 +1512,6 @@ let messageInterval = null;
 let currentUser = '';
 let pendingDeleteAction = null;
 let pendingDeleteMessageId = null;
-let currentlyEditingMessageId = null;
 
 GPC.initHeptads();
 loadPasswordSettings();
@@ -1480,6 +1583,60 @@ function formatMessageTimestamp(timestamp) {
   const days = GPC.daysFromGregorian(date);
   const gpcDate = GPC.gpcFromDays(days);
   return formatGPC(gpcDate);
+}
+
+/* ===============================
+   EDIT OVERLAY FUNCTIONS (NEW - FIX FOR MOBILE)
+=============================== */
+function showEditOverlay(messageId, currentText) {
+  editingMessageId = messageId;
+  editingMessageOriginalText = currentText;
+  
+  const textarea = document.getElementById('edit-overlay-textarea');
+  textarea.value = currentText;
+  
+  const overlay = document.getElementById('edit-overlay');
+  overlay.style.display = 'flex';
+  
+  // Focus and position cursor at the end
+  setTimeout(() => {
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    
+    // Scroll textarea into view if needed
+    textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 100);
+}
+
+function hideEditOverlay() {
+  editingMessageId = null;
+  editingMessageOriginalText = "";
+  
+  const overlay = document.getElementById('edit-overlay');
+  overlay.style.display = 'none';
+  
+  // Clear the textarea
+  document.getElementById('edit-overlay-textarea').value = "";
+}
+
+function saveEdit() {
+  const textarea = document.getElementById('edit-overlay-textarea');
+  const newText = textarea.value.trim();
+  
+  if (!newText) {
+    showConnectionError('Message cannot be empty');
+    return;
+  }
+  
+  if (newText === editingMessageOriginalText) {
+    hideEditOverlay();
+    showConnectionSuccess('No changes made');
+    return;
+  }
+  
+  editMessage(editingMessageId, newText).then(() => {
+    hideEditOverlay();
+  });
 }
 
 /* ===============================
@@ -2034,117 +2191,99 @@ function renderMessages(messages) {
     const gpcDate = GPC.gpcFromDays(days);
     const gpcFormatted = formatGPC(gpcDate);
     
-    const isEditing = currentlyEditingMessageId === messageId;
+    let messageHTML = '';
     
-    if (isEditing) {
-      div.innerHTML = `
-        <div class="meta">
-          <span class="sender">${escapeHtml(fromField)}</span>
-          <span class="time">${gpcFormatted}</span>
-        </div>
-        <div class="message-edit-form" style="display: block;">
-          <textarea class="message-edit-input" rows="3">${escapeHtml(textField)}</textarea>
-          <div class="edit-buttons">
-            <button class="save-edit-btn" data-message-id="${messageId}">Save</button>
-            <button class="cancel-edit-btn" data-message-id="${messageId}">Cancel</button>
-          </div>
-        </div>
-      `;
-    } else {
-      let messageHTML = '';
-      
-      if (replyToId && replyToSender && replyToText) {
-        messageHTML += `
-          <div class="reply-indicator">
-            <span class="reply-sender">${escapeHtml(replyToSender)}</span>
-            <span class="reply-text">${escapeHtml(replyToText)}</span>
-          </div>
-        `;
-      }
-      
+    if (replyToId && replyToSender && replyToText) {
       messageHTML += `
-        <div class="text">${escapeHtml(textField)}</div>
-        <div class="meta">
-          <span class="sender">${escapeHtml(fromField)}</span>
-          <span class="time">${gpcFormatted}</span>
+        <div class="reply-indicator">
+          <span class="reply-sender">${escapeHtml(replyToSender)}</span>
+          <span class="reply-text">${escapeHtml(replyToText)}</span>
         </div>
       `;
-      
-      div.innerHTML = messageHTML;
-      
-      const actionsDiv = document.createElement('div');
-      actionsDiv.className = 'message-actions';
-      
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'message-action-btn copy-btn';
-      copyBtn.innerHTML = '📋';
-      copyBtn.title = 'Copy message';
-      copyBtn.onclick = (e) => {
-        e.stopPropagation();
-        copyMessageToClipboard(textField, fromField, timestampField);
-      };
-      actionsDiv.appendChild(copyBtn);
-      
-      if (!isCurrentUser) {
-        const replyBtn = document.createElement('button');
-        replyBtn.className = 'message-action-btn reply-btn';
-        replyBtn.innerHTML = '↪️';
-        replyBtn.title = 'Reply to this message';
-        replyBtn.onclick = (e) => {
-          e.stopPropagation();
-          setReplyToMessage(messageId, fromField, textField);
-        };
-        actionsDiv.appendChild(replyBtn);
-      }
-      
-      // ADMIN controls - can delete ANY message
-      if (isAdmin && useSunabase && messageId) {
-        const adminDeleteBtn = document.createElement('button');
-        adminDeleteBtn.className = 'message-action-btn admin-delete-btn';
-        adminDeleteBtn.innerHTML = '🗑️';
-        adminDeleteBtn.title = 'Delete message (admin)';
-        adminDeleteBtn.onclick = (e) => {
-          e.stopPropagation();
-          showConfirmation(
-            'Delete Message (Admin)',
-            `Are you sure you want to delete this message by "${fromField}"? This action cannot be undone.`,
-            () => deleteAnyMessage(messageId),
-            messageId
-          );
-        };
-        actionsDiv.appendChild(adminDeleteBtn);
-      }
-      
-      // User controls - can edit/delete own messages
-      if (isCurrentUser && useSunabase && messageId) {
-        const editBtn = document.createElement('button');
-        editBtn.className = 'message-action-btn edit-btn';
-        editBtn.innerHTML = '✏️';
-        editBtn.title = 'Edit message';
-        editBtn.onclick = (e) => {
-          e.stopPropagation();
-          startEditingMessage(messageId, textField);
-        };
-        actionsDiv.appendChild(editBtn);
-        
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'message-action-btn delete-btn';
-        deleteBtn.innerHTML = '🗑️';
-        deleteBtn.title = 'Delete your message';
-        deleteBtn.onclick = (e) => {
-          e.stopPropagation();
-          showConfirmation(
-            'Delete Your Message',
-            'Are you sure you want to delete your message? This action cannot be undone.',
-            () => deleteSingleMessage(messageId),
-            messageId
-          );
-        };
-        actionsDiv.appendChild(deleteBtn);
-      }
-      
-      div.appendChild(actionsDiv);
     }
+    
+    messageHTML += `
+      <div class="text">${escapeHtml(textField)}</div>
+      <div class="meta">
+        <span class="sender">${escapeHtml(fromField)}</span>
+        <span class="time">${gpcFormatted}</span>
+      </div>
+    `;
+    
+    div.innerHTML = messageHTML;
+    
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'message-actions';
+    
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'message-action-btn copy-btn';
+    copyBtn.innerHTML = '📋';
+    copyBtn.title = 'Copy message';
+    copyBtn.onclick = (e) => {
+      e.stopPropagation();
+      copyMessageToClipboard(textField, fromField, timestampField);
+    };
+    actionsDiv.appendChild(copyBtn);
+    
+    if (!isCurrentUser) {
+      const replyBtn = document.createElement('button');
+      replyBtn.className = 'message-action-btn reply-btn';
+      replyBtn.innerHTML = '↪️';
+      replyBtn.title = 'Reply to this message';
+      replyBtn.onclick = (e) => {
+        e.stopPropagation();
+        setReplyToMessage(messageId, fromField, textField);
+      };
+      actionsDiv.appendChild(replyBtn);
+    }
+    
+    // ADMIN controls - can delete ANY message
+    if (isAdmin && useSunabase && messageId) {
+      const adminDeleteBtn = document.createElement('button');
+      adminDeleteBtn.className = 'message-action-btn admin-delete-btn';
+      adminDeleteBtn.innerHTML = '🗑️';
+      adminDeleteBtn.title = 'Delete message (admin)';
+      adminDeleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        showConfirmation(
+          'Delete Message (Admin)',
+          `Are you sure you want to delete this message by "${fromField}"? This action cannot be undone.`,
+          () => deleteAnyMessage(messageId),
+          messageId
+        );
+      };
+      actionsDiv.appendChild(adminDeleteBtn);
+    }
+    
+    // User controls - can edit/delete own messages (USING NEW OVERLAY FOR EDITING)
+    if (isCurrentUser && useSunabase && messageId) {
+      const editBtn = document.createElement('button');
+      editBtn.className = 'message-action-btn edit-btn';
+      editBtn.innerHTML = '✏️';
+      editBtn.title = 'Edit message';
+      editBtn.onclick = (e) => {
+        e.stopPropagation();
+        showEditOverlay(messageId, textField);
+      };
+      actionsDiv.appendChild(editBtn);
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'message-action-btn delete-btn';
+      deleteBtn.innerHTML = '🗑️';
+      deleteBtn.title = 'Delete your message';
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        showConfirmation(
+          'Delete Your Message',
+          'Are you sure you want to delete your message? This action cannot be undone.',
+          () => deleteSingleMessage(messageId),
+          messageId
+        );
+      };
+      actionsDiv.appendChild(deleteBtn);
+    }
+    
+    div.appendChild(actionsDiv);
     
     let pressTimer;
     div.addEventListener('touchstart', (e) => {
@@ -2181,53 +2320,7 @@ function renderMessages(messages) {
     container.appendChild(div);
   });
   
-  // FIX FOR EDIT KEYBOARD DISAPPEARING - Focus on textarea when editing
-  document.querySelectorAll('.save-edit-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const messageId = e.target.dataset.messageId;
-      const textarea = e.target.closest('.message-edit-form').querySelector('.message-edit-input');
-      saveMessageEdit(messageId, textarea.value);
-    });
-  });
-  
-  document.querySelectorAll('.cancel-edit-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const messageId = e.target.dataset.messageId;
-      cancelMessageEdit(messageId);
-    });
-  });
-  
-  // FOCUS ON TEXTAREA WHEN EDITING
-  const editTextarea = document.querySelector('.message-edit-input');
-  if (editTextarea && currentlyEditingMessageId) {
-    setTimeout(() => {
-      editTextarea.focus();
-      editTextarea.setSelectionRange(editTextarea.value.length, editTextarea.value.length);
-    }, 10);
-  }
-  
   setTimeout(() => container.scrollTop = container.scrollHeight, 10);
-}
-
-function startEditingMessage(messageId, currentText) {
-  currentlyEditingMessageId = messageId;
-  loadMessages();
-}
-
-function saveMessageEdit(messageId, newText) {
-  if (!newText.trim()) {
-    showConnectionError('Message cannot be empty');
-    return;
-  }
-  
-  editMessage(messageId, newText).then(() => {
-    currentlyEditingMessageId = null;
-  });
-}
-
-function cancelMessageEdit(messageId) {
-  currentlyEditingMessageId = null;
-  loadMessages();
 }
 
 /* ===============================
@@ -2360,6 +2453,7 @@ async function debugServerResponse() {
   debugContent += `Current User: ${currentUser || 'Not set'}\n`;
   debugContent += `Current Messages: ${currentMessages.length}\n`;
   debugContent += `Replying to: ${replyingToMessage ? replyingToMessage.sender : 'No one'}\n`;
+  debugContent += `Editing Message: ${editingMessageId || 'None'}\n`;
   debugContent += "\n--- Password Protection Status ---\n";
   debugContent += `Temporary Storage: ${tempPasswordEnabled ? `PROTECTED (Password: "${tempPassword}")` : 'UNPROTECTED'}\n`;
   debugContent += `Permanent Storage: ${permPasswordEnabled ? `PROTECTED (Password: "${permPassword}")` : 'UNPROTECTED'}\n`;
@@ -2411,6 +2505,7 @@ async function debugServerResponse() {
     debugContent += "\n--- Frontend State ---\n";
     debugContent += `Polling: ${messageInterval ? 'ENABLED (every 2s)' : 'DISABLED'}\n`;
     debugContent += `GPC Date: ${document.getElementById('gpc-display').textContent}\n`;
+    debugContent += `Edit Overlay Active: ${document.getElementById('edit-overlay').style.display === 'flex' ? 'YES' : 'NO'}\n`;
     
     showDebugModal(debugContent);
     
@@ -2429,14 +2524,30 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize Sunabase
   initializeSunabase();
   
-  // Start with PERMANENT Storage as default (Permanent button is already active)
-  // Note: toggleStorage will be called with 'permanent' initially
-  
   // Setup reply cancel button
   const cancelReplyBtn = document.querySelector('#reply-indicator .cancel-reply');
   if (cancelReplyBtn) {
     cancelReplyBtn.addEventListener('click', clearReply);
   }
+  
+  // Edit overlay events
+  document.getElementById('edit-overlay-save').addEventListener('click', saveEdit);
+  document.getElementById('edit-overlay-cancel').addEventListener('click', hideEditOverlay);
+  
+  // Close edit overlay when clicking outside
+  document.getElementById('edit-overlay').addEventListener('click', (e) => {
+    if (e.target.id === 'edit-overlay') {
+      hideEditOverlay();
+    }
+  });
+  
+  // Allow Enter key to save in edit overlay (but Shift+Enter for new line)
+  document.getElementById('edit-overlay-textarea').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      saveEdit();
+    }
+  });
   
   // Admin control button events
   document.getElementById('delete-all-btn').addEventListener('click', () => {
