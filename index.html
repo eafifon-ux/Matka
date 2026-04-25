@@ -1404,6 +1404,23 @@ h1 {
   color: #1e6cff;
   font-size: 12px;
 }
+.message .text table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  background: #fff;          /* ✅ White background for the whole table */
+}
+.message .text th, 
+.message .text td {
+  border: 1px solid #ddd;
+  padding: 6px 8px;
+  text-align: left;
+  background: #fff;          /* ✅ White background for cells */
+}
+.message .text th {
+  background: #f5f5f5;       /* Keep header background different (optional) */
+}
+
 
 </style>
 </head>
@@ -1642,6 +1659,9 @@ h1 {
 
 <!-- Add Sunabase JS Library -->
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+
 
 <script>
 /* ===============================
@@ -1906,6 +1926,130 @@ let pendingDeleteMessageId = null;
 
 GPC.initHeptads();
 loadPasswordSettings();
+
+// Wikilink extension: [[text]] → <a href="/wiki/text">text</a>
+const wikilinkExtension = {
+  name: 'wikilink',
+  level: 'inline',
+  start(src) { return src.indexOf('[['); },
+  tokenizer(src) {
+    const match = src.match(/^\[\[([^\]]+?)(?:\|([^\]]+))?\]\]/);
+    if (!match) return;
+    // match[1] = target, match[2] = alias (or undefined)
+    // Also support :: syntax: [[target::alias]]
+    const altMatch = src.match(/^\[\[([^:\]]+)::([^\]]+)\]\]/);
+    if (altMatch) {
+      return { type: 'wikilink', raw: altMatch[0], target: altMatch[1], alias: altMatch[2] };
+    }
+    if (match) {
+      return { type: 'wikilink', raw: match[0], target: match[1], alias: match[2] || match[1] };
+    }
+  },
+  renderer(token) {
+    const display = token.alias || token.target;
+    const url = `https://eafifon-ux.github.io/Lotus/${encodeURIComponent(token.target)}`;
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${display}</a>`;
+  }
+};
+
+// Subscript: ~text~
+const subscriptExtension = {
+  name: 'subscript',
+  level: 'inline',
+  start(src) { return src.indexOf('~'); },
+  tokenizer(src) {
+    const match = src.match(/^~([^~]+)~/);
+    if (match) {
+      return { type: 'subscript', raw: match[0], text: match[1] };
+    }
+  },
+  renderer(token) {
+    return `<sub>${token.text}</sub>`;
+  }
+};
+
+// Superscript: ^text^
+const superscriptExtension = {
+  name: 'superscript',
+  level: 'inline',
+  start(src) { return src.indexOf('^'); },
+  tokenizer(src) {
+    const match = src.match(/^\^([^^]+)\^/);
+    if (match) {
+      return { type: 'superscript', raw: match[0], text: match[1] };
+    }
+  },
+  renderer(token) {
+    return `<sup>${token.text}</sup>`;
+  }
+};
+
+// Highlight: ==text==  or  ==color:text==
+const highlightExtension = {
+  name: 'highlight',
+  level: 'inline',
+  start(src) { return src.indexOf('=='); },
+  tokenizer(src) {
+    const match = src.match(/^==([^=]+?)==/);
+    if (match) {
+      // Check if there's a color prefix (e.g. red: , pink: , etc.)
+      const parts = match[1].split(':');
+      if (parts.length === 2 && ['pink','orange','yellow','green','blue','purple','gray','brown'].includes(parts[0].toLowerCase())) {
+        return { type: 'highlight', raw: match[0], color: parts[0].toLowerCase(), text: parts[1] };
+      }
+      return { type: 'highlight', raw: match[0], color: 'yellow', text: match[1] };
+    }
+  },
+  renderer(token) {
+    // Define color map
+    const colors = {
+      yellow: '#ffff00',
+      pink: '#ff69b4',
+      orange: '#ffa500',
+      green: '#90ee90',
+      blue: '#87ceeb',
+      purple: '#dda0dd',
+      gray: '#d3d3d3',
+      brown: '#d2b48c'
+    };
+    const bg = colors[token.color] || colors.yellow;
+    return `<mark style="background-color: ${bg};">${token.text}</mark>`;
+  }
+};
+
+
+marked.use({ extensions: [wikilinkExtension, subscriptExtension, superscriptExtension, highlightExtension] });
+
+
+function stripMarkdown(text) {
+  return text
+    // Bold / Italic
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    // Links
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+    // Wikilinks (order matters: handle aliases first)
+    .replace(/\[\[([^\]]+?)\|([^\]]+)\]\]/g, '$2')     // [[target|alias]] → alias
+    .replace(/\[\[([^\]]+?)::([^\]]+)\]\]/g, '$2')     // [[target::alias]] → alias
+    .replace(/\[\[([^\]]+)\]\]/g, '$1')                 // [[target]] → target
+    // Highlight (==text== and ==color:text==)
+    .replace(/==(?:[a-z]+:)?([^=]+)==/g, '$1')
+    // Inline code
+    .replace(/`([^`]+)`/g, '$1')
+    // Strikethrough
+    .replace(/~~(.*?)~~/g, '$1')
+    // Subscript / Superscript
+    .replace(/~([^~]+)~/g, '$1')
+    .replace(/\^([^^]+)\^/g, '$1')
+    // Headings
+    .replace(/^#{1,6}\s*/gm, '')
+    // List markers
+    .replace(/^[\*\-+]\s+/gm, '')
+    // Blockquotes
+    .replace(/^>\s+/gm, '');
+}
+
+
 
 /* ===============================
    DOM FILTER FUNCTIONS (NEW)
@@ -2246,7 +2390,9 @@ function setReplyToMessage(messageId, sender, text) {
   const textSpan = indicator.querySelector('.reply-text');
   
   senderSpan.textContent = sender;
-  textSpan.textContent = text.length > 50 ? text.substring(0, 50) + '...' : text;
+  const stripped = stripMarkdown(text);
+textSpan.textContent = stripped.length > 50 ? stripped.substring(0, 50) + '...' : stripped;
+
   indicator.style.display = 'flex';
   
   document.getElementById('message-input').focus();
@@ -2938,18 +3084,21 @@ function renderMessages(messages) {
       messageHTML += `
         <div class="reply-indicator">
           <span class="reply-sender">${escapeHtml(replyToSender)}</span>
-          <span class="reply-text">${escapeHtml(replyToText)}</span>
+          <span class="reply-text">${escapeHtml(stripMarkdown(replyToText))}</span>
         </div>
       `;
     }
     
-    messageHTML += `
-      <div class="text">${escapeHtml(textField)}</div>
-      <div class="meta">
-        <span class="sender">${escapeHtml(fromField)}</span>
-        <span class="time">${gpcFormatted}</span>
-      </div>
-    `;
+    // Convert markdown to HTML, then sanitize
+const mdHtml = DOMPurify.sanitize(marked.parse(textField || ''));
+messageHTML += `
+  <div class="text">${mdHtml}</div>
+  <div class="meta">
+    <span class="sender">${escapeHtml(fromField)}</span>
+    <span class="time">${gpcFormatted}</span>
+  </div>
+`;
+
     
     div.innerHTML = messageHTML;
     
