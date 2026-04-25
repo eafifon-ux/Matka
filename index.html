@@ -2666,6 +2666,8 @@ function toggleDOSFilter() {
     clearDOSFilter();
     document.querySelector('button[data-mode="DOS"]').classList.remove('active');
     hideDOSFilter();
+    mode = "DOY";                         // revert to default display mode
+    updateTopBar();                        // update GPC display
     showConnectionSuccess('DOS filter deactivated.');
   } else {
     // Deactivate DOY if active (mutual exclusivity)
@@ -2683,11 +2685,16 @@ function toggleDOSFilter() {
     showDOSFilter();
     updateDOSSeasonTable();
     updateDOSStatus();
+
+    mode = "DOS";                         // set display mode to DOS
+    updateTopBar();                        // now shows Q1–01 etc.
+
     loadMessages();
     document.querySelector('button[data-mode="DOS"]').classList.add('active');
     showConnectionSuccess('DOS filter activated.');
   }
 }
+
 
 
 
@@ -2811,16 +2818,17 @@ function toggleDOYFilter() {
 
     document.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
     document.querySelector('button[data-mode="DOY"]').classList.add('active');
-    mode = "DOY";
+    mode = "DOY";                         // ensure display mode is DOY
+    updateTopBar();
 
     showDOYFilter();
     updateDOYTable();
     updateDOYStatus();
-    updateTopBar();
     if (currentUser) loadMessages();
     showConnectionSuccess('DOY filter activated. Click a month to filter messages.');
   }
 }
+
 
 function setDOYFilter(month) {
   currentDOYMonth = month;
