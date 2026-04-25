@@ -1801,6 +1801,8 @@ function checkAdminAccess(username) {
 
 // Reply state
 let replyingToMessage = null;
+let userScrolledUp = false;
+
 
 /* ===============================
    GPC ENGINE
@@ -3225,7 +3227,12 @@ messageHTML += `
     container.appendChild(div);
   });
   
-  setTimeout(() => container.scrollTop = container.scrollHeight, 10);
+  setTimeout(() => {
+  if (!userScrolledUp) {
+    container.scrollTop = container.scrollHeight;
+  }
+}, 10);
+
 }
 
 /* ===============================
@@ -3664,6 +3671,16 @@ if (heptadBtn) {
   document.getElementById('debug-btn').addEventListener("click", debugServerResponse);
   document.getElementById('close-debug-btn').addEventListener("click", closeDebugModal);
   document.getElementById('copy-debug-btn').addEventListener("click", copyDebugInfo);
+  
+  const messagesContainer = document.getElementById("messages");
+if (messagesContainer) {
+  messagesContainer.addEventListener("scroll", () => {
+    const threshold = 30; // pixels from the bottom
+    const atBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight < threshold;
+    userScrolledUp = !atBottom;
+  });
+}
+
   
   updateTopBar();
   setInterval(updateTopBar, 10000);
