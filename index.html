@@ -1404,6 +1404,22 @@ h1 {
   color: #1e6cff;
   font-size: 12px;
 }
+.week-filter-table td.today {
+  font-weight: bold !important;
+  border: 2px solid #1e6cff !important;
+  position: relative;
+}
+
+.week-filter-table td.today::after {
+  content: "•";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  color: #1e6cff;
+  font-size: 12px;
+  pointer-events: none;
+}
+
 .message .text table {
   border-collapse: collapse;
   width: 100%;
@@ -1498,13 +1514,13 @@ h1 {
       </tr>
       <tr>
         <td>GPC</td>
-        <td data-day-index="0" class="filter-day" data-day-name="UN">UN</td>
-        <td data-day-index="1" class="filter-day" data-day-name="DU">DU</td>
-        <td data-day-index="2" class="filter-day" data-day-name="TR">TR</td>
-        <td data-day-index="3" class="filter-day" data-day-name="FR">FR</td>
-        <td data-day-index="4" class="filter-day" data-day-name="FV">FV</td>
-        <td data-day-index="5" class="filter-day" data-day-name="SS">SS</td>
-        <td data-day-index="6" class="filter-day" data-day-name="SH">SH</td>
+        <td data-day-index="0" class="filter-day" data-day-name="UN">FR</td>
+        <td data-day-index="1" class="filter-day" data-day-name="DU">FV</td>
+        <td data-day-index="2" class="filter-day" data-day-name="TR">SS</td>
+        <td data-day-index="3" class="filter-day" data-day-name="FR">SH</td>
+        <td data-day-index="4" class="filter-day" data-day-name="FV">UN</td>
+        <td data-day-index="5" class="filter-day" data-day-name="SS">DU</td>
+        <td data-day-index="6" class="filter-day" data-day-name="SH">TR</td>
       </tr>
     </tbody>
   </table>
@@ -1691,7 +1707,7 @@ let editingMessageOriginalText = "";
 let currentDayFilter = null; // 0-6 (Sunday=0, Monday=1, etc. but we'll use GPC days: W=0, TH=1, F=2, S=3, SN=4, M=5, T=6)
 let dayNames = ["Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "Monday", "Tuesday"];
 let dayShortNames = ["W", "TH", "F", "S", "SN", "M", "T"];
-let dayGPCNames = ["UN", "DU", "TR", "FR", "FV", "SS", "SH"];
+let dayGPCNames = ["FR", "FV", "SS", "SH", "UN", "DU", "TR"];
 let dayEmojis = ["🟠", "🟤", "🌺", "⚫", "🟢", "🔵", "🟣"];
 
 // NEW: DOM Filter State
@@ -2258,6 +2274,24 @@ function highlightTodayInCalendar() {
   }
 }
 
+// Auto-highlight today's GPC day of week in the week filter table
+function highlightTodayInWeekFilter() {
+  const now = new Date();
+  const days = GPC.daysFromGregorian(now);
+  const gpcDate = GPC.gpcFromDays(days);
+  const dayIndex = GPC.getDayOfWeekIndex(gpcDate.doy); // 0-6 (GPC week: W=0, TH=1, ...)
+  
+  // Remove any existing "today" class from all .filter-day cells
+  document.querySelectorAll('.filter-day').forEach(cell => {
+    cell.classList.remove('today');
+  });
+  
+  // Add "today" class to all cells with matching data-day-index
+  document.querySelectorAll(`.filter-day[data-day-index="${dayIndex}"]`).forEach(cell => {
+    cell.classList.add('today');
+  });
+}
+
 
 /* ===============================
    WEEK FILTER FUNCTIONS (NEW)
@@ -2299,10 +2333,13 @@ function clearDayFilter() {
 
 function prevDayFilter() {
   if (currentDayFilter === null) {
-    // If no filter is set, start with Wednesday (index 0)
-    setDayFilter(0);
+    // Start with today's GPC day of week
+    const now = new Date();
+    const days = GPC.daysFromGregorian(now);
+    const gpcDate = GPC.gpcFromDays(days);
+    const dayIndex = GPC.getDayOfWeekIndex(gpcDate.doy);
+    setDayFilter(dayIndex);
   } else {
-    // Move to previous day (wrap around)
     const newIndex = (currentDayFilter - 1 + 7) % 7;
     setDayFilter(newIndex);
   }
@@ -2310,14 +2347,18 @@ function prevDayFilter() {
 
 function nextDayFilter() {
   if (currentDayFilter === null) {
-    // If no filter is set, start with Wednesday (index 0)
-    setDayFilter(0);
+    // Start with today's GPC day of week
+    const now = new Date();
+    const days = GPC.daysFromGregorian(now);
+    const gpcDate = GPC.gpcFromDays(days);
+    const dayIndex = GPC.getDayOfWeekIndex(gpcDate.doy);
+    setDayFilter(dayIndex);
   } else {
-    // Move to next day (wrap around)
     const newIndex = (currentDayFilter + 1) % 7;
     setDayFilter(newIndex);
   }
 }
+
 
 function updateFilterTable() {
   // Remove active class from all cells
@@ -3607,6 +3648,8 @@ if (heptadBtn) {
       
       // Show week filter TABLE (not necessarily activate filter)
       showWeekFilter();
+highlightTodayInWeekFilter();
+
       
       // Clear DOM filter if active
       if (domFilterActive) {
