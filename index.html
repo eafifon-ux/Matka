@@ -1563,6 +1563,149 @@ h1 {
   color: #333;
 }
 
+/* DOY filter styles */
+#doy-filter-container {
+  text-align: center;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  display: none;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+#doy-filter-container h4 {
+  margin-top: 0;
+  color: #1e6cff;
+  font-size: 1em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 15px;
+}
+
+.doy-filter-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 15px;
+  font-size: 0.9em;
+  table-layout: fixed;
+}
+
+.doy-filter-table th {
+  background: #f0f5ff;
+  padding: 8px 5px;
+  text-align: center;
+  font-weight: bold;
+  color: #1e6cff;
+  border: 1px solid #e0e0e0;
+}
+
+.doy-filter-table td {
+  padding: 12px 5px;
+  text-align: center;
+  border: 1px solid #e0e0e0;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 0.92em;
+}
+
+.doy-filter-table td:hover {
+  background: #f0f5ff;
+}
+
+.doy-filter-table td.active {
+  background: #1e6cff;
+  color: white;
+  font-weight: bold;
+}
+
+.doy-filter-table td.today {
+  font-weight: bold !important;
+  border: 2px solid #1e6cff !important;
+  position: relative;
+}
+
+.doy-filter-table td.today::after {
+  content: "•";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  color: #1e6cff;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.doy-filter-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 15px;
+}
+
+.doy-filter-buttons button {
+  padding: 8px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: bold;
+  background: #4CAF50;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.doy-filter-buttons button:hover {
+  background: #45a049;
+}
+
+.doy-filter-buttons button#prev-doy-btn {
+  background: #ff9800;
+}
+
+.doy-filter-buttons button#prev-doy-btn:hover {
+  background: #f57c00;
+}
+
+.doy-filter-buttons button#next-doy-btn {
+  background: #2196F3;
+}
+
+.doy-filter-buttons button#next-doy-btn:hover {
+  background: #0b7dda;
+}
+
+.doy-filter-status {
+  text-align: center;
+  padding: 8px 15px;
+  background: #e8f5e8;
+  color: #4CAF50;
+  border-radius: 20px;
+  font-size: 0.9em;
+  margin-top: 10px;
+  display: inline-block;
+}
+
+.doy-filter-status .doy-filter-remove {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 1.2em;
+  margin-left: 8px;
+  padding: 0 5px;
+  border-radius: 3px;
+}
+
+.doy-filter-status .doy-filter-remove:hover {
+  background: rgba(0,0,0,0.05);
+  color: #333;
+}
+
 </style>
 </head>
 
@@ -1642,6 +1785,48 @@ h1 {
 </div>
 
 
+<!-- NEW DOY FILTER CONTAINER -->
+<div id="doy-filter-container">
+  <h4>Day of Year Filter</h4>
+  <table class="doy-filter-table">
+    <thead>
+      <tr>
+        <th>Q1</th>
+        <th>Q2</th>
+        <th>Q3</th>
+        <th>Q4</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="doy-month" data-month="1">🟠 Unspring</td>
+        <td class="doy-month" data-month="4">🟠 Quadsum</td>
+        <td class="doy-month" data-month="7">🟠 Sepafall</td>
+        <td class="doy-month" data-month="10">🟠 Dekawint</td>
+      </tr>
+      <tr>
+        <td class="doy-month" data-month="2">🌺 Duspring</td>
+        <td class="doy-month" data-month="5">🌺 Fivesum</td>
+        <td class="doy-month" data-month="8">🌺 Oktafall</td>
+        <td class="doy-month" data-month="11">🌺 Elvawint</td>
+      </tr>
+      <tr>
+        <td class="doy-month" data-month="3">🟢 Trispring</td>
+        <td class="doy-month" data-month="6">🟢 Sixsum</td>
+        <td class="doy-month" data-month="9">🟢 Novafall</td>
+        <td class="doy-month" data-month="12">🟢 Dozawint</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="doy-filter-buttons">
+    <button id="prev-doy-btn">⬅️ PREV</button>
+    <button id="next-doy-btn">NEXT ➡️</button>
+  </div>
+  <div class="doy-filter-status" id="doy-filter-status" style="display: none;">
+    Showing messages from <span id="current-doy-month">Unspring</span>
+    <button class="doy-filter-remove" title="Clear filter">×</button>
+  </div>
+</div>
 
 
 
@@ -2091,6 +2276,18 @@ function getGPCMonthDay(gpcDoy) {
   };
 }
 
+// Get GPC month number (1-12) from a GPC day of year (1-364)
+function getGPCMonthFromDoy(doy) {
+  const monthLengths = [30,30,31,30,30,31,30,30,31,30,30,31];
+  let remaining = doy;
+  for (let i = 0; i < monthLengths.length; i++) {
+    if (remaining <= monthLengths[i]) return i + 1;
+    remaining -= monthLengths[i];
+  }
+  return 12; // fallback
+}
+
+
 /* ===============================
    APPLICATION STATE
 =============================== */
@@ -2440,6 +2637,18 @@ let currentDOSDay = null;      // 1-91
 const seasonNames = ["Spring", "Summer", "Fall", "Winter"];
 const seasonEmojis = ["🌱", "☀️", "🍂", "❄️"];
 
+// DOY filter state
+let doyFilterActive = false;
+let currentDOYMonth = null;   // 1-12
+const doyMonthNames = [
+  "Unspring", "Duspring", "Trispring",
+  "Quadsum", "Fivesum", "Sixsum",
+  "Sepafall", "Oktafall", "Novafall",
+  "Dekawint", "Elvawint", "Dozawint"
+];
+const doyMonthEmojis = ["🟠","🌺","🟢","🟠","🌺","🟢","🟠","🌺","🟢","🟠","🌺","🟢"];
+
+
 function showDOSFilter() {
   document.getElementById('dos-filter-container').style.display = 'block';
   dosFilterActive = true;
@@ -2459,7 +2668,11 @@ function toggleDOSFilter() {
     hideDOSFilter();
     showConnectionSuccess('DOS filter deactivated.');
   } else {
-    // Activate DOS – no longer clear other filters
+    // Deactivate DOY if active (mutual exclusivity)
+    if (doyFilterActive) {
+      clearDOYFilter();
+      document.querySelector('button[data-mode="DOY"]').classList.remove('active');
+    }
     const now = new Date();
     const days = GPC.daysFromGregorian(now);
     const gpcDate = GPC.gpcFromDays(days);
@@ -2475,6 +2688,7 @@ function toggleDOSFilter() {
     showConnectionSuccess('DOS filter activated.');
   }
 }
+
 
 
 function setDOSFilter(season) {
@@ -2556,8 +2770,143 @@ function filterMessagesByDOS(messages) {
     const season = Math.floor((gpc.doy - 1) / 91) + 1;
     return season === currentSeason; // ignore day, match any day in season
   });
+  
+
+
 }
 
+/* ===============================
+   DOY FILTER FUNCTIONS
+=============================== */
+function showDOYFilter() {
+  document.getElementById('doy-filter-container').style.display = 'block';
+  doyFilterActive = true;
+  highlightCurrentMonthInDOY();
+  updateDOYTable();
+  updateDOYStatus();
+}
+
+function hideDOYFilter() {
+  document.getElementById('doy-filter-container').style.display = 'none';
+  doyFilterActive = false;
+}
+
+function toggleDOYFilter() {
+  if (doyFilterActive) {
+    clearDOYFilter();
+    document.querySelector('button[data-mode="DOY"]').classList.remove('active');
+    hideDOYFilter();
+    showConnectionSuccess('DOY filter deactivated.');
+  } else {
+    // Deactivate DOS if active (mutual exclusivity)
+    if (dosFilterActive) {
+      clearDOSFilter();
+      document.querySelector('button[data-mode="DOS"]').classList.remove('active');
+    }
+    const now = new Date();
+    const days = GPC.daysFromGregorian(now);
+    const gpcDate = GPC.gpcFromDays(days);
+    const month = getGPCMonthFromDoy(gpcDate.doy);
+    currentDOYMonth = month;
+
+    document.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
+    document.querySelector('button[data-mode="DOY"]').classList.add('active');
+    mode = "DOY";
+
+    showDOYFilter();
+    updateDOYTable();
+    updateDOYStatus();
+    updateTopBar();
+    if (currentUser) loadMessages();
+    showConnectionSuccess('DOY filter activated. Click a month to filter messages.');
+  }
+}
+
+function setDOYFilter(month) {
+  currentDOYMonth = month;
+  updateDOYTable();
+  updateDOYStatus();
+  loadMessages();
+}
+
+function clearDOYFilter() {
+  currentDOYMonth = null;
+  doyFilterActive = false;
+  updateDOYTable();
+  updateDOYStatus();
+  loadMessages();
+  hideDOYFilter();
+  document.querySelector('button[data-mode="DOY"]').classList.remove('active');
+}
+
+function prevDOYMonth() {
+  if (currentDOYMonth === null) {
+    const now = new Date();
+    const days = GPC.daysFromGregorian(now);
+    const gpcDate = GPC.gpcFromDays(days);
+    const month = getGPCMonthFromDoy(gpcDate.doy);
+    setDOYFilter(month);
+  } else {
+    const newMonth = currentDOYMonth === 1 ? 12 : currentDOYMonth - 1;
+    setDOYFilter(newMonth);
+  }
+}
+
+function nextDOYMonth() {
+  if (currentDOYMonth === null) {
+    const now = new Date();
+    const days = GPC.daysFromGregorian(now);
+    const gpcDate = GPC.gpcFromDays(days);
+    const month = getGPCMonthFromDoy(gpcDate.doy);
+    setDOYFilter(month);
+  } else {
+    const newMonth = currentDOYMonth === 12 ? 1 : currentDOYMonth + 1;
+    setDOYFilter(newMonth);
+  }
+}
+
+function updateDOYTable() {
+  document.querySelectorAll('.doy-month').forEach(cell => {
+    cell.classList.remove('active');
+  });
+  if (currentDOYMonth !== null) {
+    const cell = document.querySelector(`.doy-month[data-month="${currentDOYMonth}"]`);
+    if (cell) cell.classList.add('active');
+  }
+}
+
+function updateDOYStatus() {
+  const statusEl = document.getElementById('doy-filter-status');
+  const monthSpan = document.getElementById('current-doy-month');
+  if (currentDOYMonth !== null) {
+    monthSpan.textContent = doyMonthNames[currentDOYMonth - 1];
+    statusEl.style.display = 'inline-block';
+  } else {
+    statusEl.style.display = 'none';
+  }
+}
+
+function highlightCurrentMonthInDOY() {
+  const now = new Date();
+  const days = GPC.daysFromGregorian(now);
+  const gpcDate = GPC.gpcFromDays(days);
+  const month = getGPCMonthFromDoy(gpcDate.doy);
+  document.querySelectorAll('.doy-month').forEach(cell => cell.classList.remove('today'));
+  const todayCell = document.querySelector(`.doy-month[data-month="${month}"]`);
+  if (todayCell) todayCell.classList.add('today');
+}
+
+function filterMessagesByDOY(messages) {
+  if (currentDOYMonth === null) return messages;
+  return messages.filter(msg => {
+    const ts = msg.timestamp || msg.created_at || msg.createdAt || msg.time || Date.now();
+    const date = new Date(ts);
+    const days = GPC.daysFromGregorian(date);
+    const gpc = GPC.gpcFromDays(days);
+    const month = getGPCMonthFromDoy(gpc.doy);
+    return month === currentDOYMonth;
+  });
+}
 
 
 // Auto-highlight today's GPC day of week in the week filter table
@@ -2699,12 +3048,14 @@ function filterMessagesByDay(messages) {
 function filterMessages(messages) {
   let filtered = messages;
 
-  // DOS filter (season) – applied first
-  if (dosFilterActive && currentSeason !== null) {
+  // DOY or DOS filter – mutually exclusive
+  if (doyFilterActive && currentDOYMonth !== null) {
+    filtered = filterMessagesByDOY(filtered);
+  } else if (dosFilterActive && currentSeason !== null) {
     filtered = filterMessagesByDOS(filtered);
   }
 
-  // Then apply week or DOM filter (they are still mutually exclusive with each other)
+  // Then apply week or DOM filter (still mutually exclusive with each other)
   if (currentDayFilter !== null) {
     filtered = filterMessagesByDay(filtered);
   } else if (currentDOMFilter !== null) {
@@ -2713,6 +3064,7 @@ function filterMessages(messages) {
 
   return filtered;
 }
+
 
 
 
@@ -3319,15 +3671,20 @@ async function loadMessages() {
     const totalCount = currentMessages.length;
     const messageCountEl = document.getElementById('message-count');
     if (messageCountEl) {
-      let filterText = '';
-      
+            let filterText = '';
+
       if (currentDayFilter !== null && currentDOMFilter !== null) {
         filterText = ` (${dayNames[currentDayFilter]} & day ${currentDOMFilter} only)`;
       } else if (currentDayFilter !== null) {
         filterText = ` (${dayNames[currentDayFilter]} only)`;
       } else if (currentDOMFilter !== null) {
         filterText = ` (day ${currentDOMFilter} only)`;
+      } else if (doyFilterActive && currentDOYMonth !== null) {
+        filterText = ` (${doyMonthNames[currentDOYMonth - 1]} only)`;
+      } else if (dosFilterActive && currentSeason !== null) {
+        filterText = ` (${seasonNames[currentSeason - 1]} only)`;
       }
+
       
       messageCountEl.textContent = ` • ${count} of ${totalCount} messages${filterText}`;
     }
@@ -3847,6 +4204,19 @@ document.getElementById('next-dos-btn').addEventListener('click', nextDOSSeason)
 
 document.querySelector('.dos-filter-remove').addEventListener('click', clearDOSFilter);
 
+// DOY filter events
+document.querySelectorAll('.doy-month').forEach(cell => {
+  cell.addEventListener('click', () => {
+    const month = parseInt(cell.dataset.month);
+    setDOYFilter(month);
+    showConnectionSuccess(`DOY filter: ${doyMonthNames[month - 1]}`);
+  });
+});
+document.getElementById('prev-doy-btn').addEventListener('click', prevDOYMonth);
+document.getElementById('next-doy-btn').addEventListener('click', nextDOYMonth);
+document.querySelector('.doy-filter-remove').addEventListener('click', clearDOYFilter);
+
+
   
   // Admin control button events
   document.getElementById('delete-all-btn').addEventListener('click', () => {
@@ -3928,10 +4298,12 @@ document.querySelector('.dos-filter-remove').addEventListener('click', clearDOSF
       return;  // ← stop further processing
     }
 
-    // For other modes (DOY) – just switch display
-    document.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    mode = modeValue;
+    // DOY is a filter toggle, handled separately
+    if (modeValue === "DOY") {
+      toggleDOYFilter();
+      return;
+    }
+
 
     // Hide DOM filter when leaving DOM mode
     if (mode !== "DOM") {
