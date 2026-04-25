@@ -1705,6 +1705,17 @@ h1 {
   background: rgba(0,0,0,0.05);
   color: #333;
 }
+.message .text {
+  text-align: start;
+}
+[dir="rtl"] .message-actions {
+  right: auto;
+  left: 8px;
+}
+[dir="rtl"] .reply-indicator {
+  flex-direction: row-reverse;
+}
+
 
 </style>
 </head>
@@ -1933,7 +1944,7 @@ h1 {
 
 <div id="user-setup">
   <h3>Enter Your Name</h3>
-  <input type="text" id="username-input" placeholder="What's your name?" />
+  <input type="text" id="username-input" dir="auto" placeholder="What's your name?" />
   <button id="set-username-btn">Start Chatting</button>
   <div id="setup-error" class="error-message"></div>
 </div>
@@ -1953,14 +1964,14 @@ h1 {
   </div>
   
   <div id="input-area">
-    <div id="reply-indicator">
+    <div id="reply-indicator" dir="auto">
       <div class="reply-info">
         Replying to <span class="reply-sender"></span>: <span class="reply-text"></span>
       </div>
       <button class="cancel-reply" title="Cancel reply">×</button>
     </div>
     <div class="input-row">
-      <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off" disabled />
+      <input type="text" id="message-input" dir="auto" placeholder="Type your message..." autocomplete="off" disabled />
       <button id="send-btn">Send</button>
     </div>
   </div>
@@ -1979,7 +1990,7 @@ h1 {
 <div id="edit-overlay" class="edit-overlay">
   <div class="edit-overlay-content">
     <h4>Edit Message</h4>
-    <textarea id="edit-overlay-textarea" class="edit-overlay-textarea" placeholder="Edit your message..."></textarea>
+    <textarea id="edit-overlay-textarea" dir="auto" class="edit-overlay-textarea" placeholder="Edit your message..."></textarea>
     <div class="edit-overlay-buttons">
       <button id="edit-overlay-cancel" class="edit-overlay-cancel">Cancel</button>
       <button id="edit-overlay-save" class="edit-overlay-save">Save</button>
@@ -3795,7 +3806,7 @@ function renderMessages(messages) {
     // Convert markdown to HTML, then sanitize
 const mdHtml = DOMPurify.sanitize(marked.parse(textField || ''));
 messageHTML += `
-  <div class="text">${mdHtml}</div>
+  <div class="text" dir="auto">${mdHtml}</div>
   <div class="meta">
     <span class="sender">${escapeHtml(fromField)}</span>
     <span class="time">${gpcFormatted}</span>
