@@ -1728,10 +1728,39 @@ h1 {
 
 <div id="connection-status" class="connection-status"></div>
 
-<!-- STORAGE TOGGLE -->
-<div class="storage-toggle">
+<!-- STORAGE + ROOM CONTROLS -->
+<div class="storage-toggle" style="display:flex; align-items:center; gap:10px;">
+  
+  <!-- Existing buttons -->
   <button id="storage-temp">Temporary Storage</button>
   <button id="storage-permanent" class="active">Permanent Storage</button>
+  
+  <!-- Push room controls to right -->
+  <div style="margin-left:auto; display:flex; align-items:center; gap:6px;">
+    
+    <span id="roomLabel" style="font-size:11px; opacity:0.6;"></span>
+    
+    <button onclick="createRoom()" style="
+      background:none;
+      border:none;
+      font-size:16px;
+      cursor:pointer;
+      opacity:0.8;
+    ">
+      ＋
+    </button>
+    
+    <button onclick="copyInvite()" style="
+      background:none;
+      border:none;
+      font-size:14px;
+      cursor:pointer;
+      opacity:0.8;
+    ">
+      🔗
+    </button>
+    
+  </div>
 </div>
 
 <!-- NEW DOM FILTER CONTAINER -->
@@ -2040,6 +2069,26 @@ h1 {
 
 
 <script>
+function getRoomId() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("room") || "global";
+}
+
+const roomId = getRoomId();
+console.log("Room ID:", roomId);
+
+function createRoom() {
+  const newRoomId = crypto.randomUUID();
+  window.location.href = `?room=${newRoomId}`;
+}
+
+function copyInvite() {
+  navigator.clipboard.writeText(window.location.href);
+  alert("Invite link copied!");
+}
+
+document.getElementById("roomLabel").textContent =
+  "Room: " + roomId.slice(0, 6);
 /* ===============================
    CONFIGURATION
 =============================== */
@@ -3671,9 +3720,10 @@ async function loadMessages() {
       }
       
       const { data: messages, error } = await supabaseClient
-        .from('messages')
-        .select('*')
-        .order('timestamp', { ascending: true });
+.from('messages')
+.select('*')
+.eq('room_id', roomId) // ✅ THIS is Step 3
+.order('timestamp', { ascending: true });
       
       if (error) {
         throw new Error(`Permanent storage: ${error.message}`);
@@ -3991,10 +4041,11 @@ async function sendMessage() {
   try {
     if (useSunabase) {
       const messageData = {
-        from_user: currentUser,
-        text: text,
-        timestamp: new Date().toISOString()
-      };
+  from_user: currentUser,
+  text: text,
+  timestamp: new Date().toISOString(),
+  room_id: roomId // ✅ THIS is Step 4
+};
       
       if (replyingToMessage) {
         messageData.reply_to_id = replyingToMessage.id;
