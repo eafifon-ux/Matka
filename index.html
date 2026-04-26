@@ -4082,42 +4082,16 @@ messageHTML += `
     
     div.appendChild(actionsDiv);
     
-    let pressTimer;
-    div.addEventListener('touchstart', (e) => {
-      pressTimer = setTimeout(() => {
-        copyMessageToClipboard(textField, fromField, timestampField);
-      }, 500);
-    });
-    
-    div.addEventListener('touchend', () => {
-      clearTimeout(pressTimer);
-    });
-    
-    div.addEventListener('touchmove', () => {
-      clearTimeout(pressTimer);
-    });
-    
-    let mousePressTimer;
-    div.addEventListener('mousedown', (e) => {
-      if (e.button === 0) {
-        mousePressTimer = setTimeout(() => {
-          copyMessageToClipboard(textField, fromField, timestampField);
-        }, 1000);
-      }
-    });
-    
-    div.addEventListener('mouseup', () => {
-      clearTimeout(mousePressTimer);
-    });
-    
-    div.addEventListener('mouseleave', () => {
-      clearTimeout(mousePressTimer);
-    });
-    
-    container.appendChild(div);
-  });
-  
-  setTimeout(() => {
+    // ✅ Long-press auto-copy completely removed
+// You can now freely select/highlight long text for Google Translate on mobile
+// Use the small clipboard icon (copy button) to copy the full message instead
+
+// No more touchstart / mousedown long-press listeners
+
+container.appendChild(div);
+});
+
+setTimeout(() => {
   if (!userScrolledUp) {
     container.scrollTop = container.scrollHeight;
   }
