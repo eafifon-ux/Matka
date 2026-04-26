@@ -2676,6 +2676,12 @@ function hideDOSFilter() {
   dosFilterActive = false;
 }
 
+function hideDOYFilter() {
+  document.getElementById('doy-filter-container').style.display = 'none';
+  doyFilterActive = false;
+}
+
+
 function toggleDOSFilter() {
   if (dosFilterActive) {
     clearDOSFilter();
@@ -4459,6 +4465,68 @@ if (rememberedUsername) {
       debugClickCount = 0;
     }, 500);
   });
+  
+  // Logout by clicking username
+document.getElementById('user-display').addEventListener('click', function() {
+  if (!currentUser) return;
+  if (confirm('Are you sure you want to log out? You can enter a new name.')) {
+    // Clear user state
+    currentUser = '';
+    if (messageInterval) {
+      clearInterval(messageInterval);
+      messageInterval = null;
+    }
+    // Clear reply state
+    clearReply();
+    // Clear filters
+    currentDayFilter = null;
+    currentDOMFilter = null;
+    currentDOYMonth = null;
+    currentSeason = null;
+    domFilterActive = false;
+    dosFilterActive = false;
+    doyFilterActive = false;
+    heptad = false;
+    isAdmin = false;
+    
+    // Hide chat, show setup
+    document.getElementById('chat-container').style.display = 'none';
+    document.getElementById('user-setup').style.display = 'block';
+    document.getElementById('user-display').textContent = '';
+    
+    // Clear messages container
+    document.getElementById('messages').innerHTML = '';
+    
+    // Reset input
+    document.getElementById('message-input').disabled = true;
+    document.getElementById('send-btn').disabled = true;
+    document.getElementById('message-input').value = '';
+    
+    // Hide admin controls
+    document.getElementById('admin-controls').style.display = 'none';
+    
+    // Reset mode buttons
+    document.querySelectorAll('[data-mode]').forEach(b => b.classList.remove('active'));
+    document.querySelector('button[data-mode="DOY"]').classList.add('active');
+    mode = 'DOY';
+    
+    // Hide all filter containers
+    hideWeekFilter();
+    hideDOMFilter();
+    hideDOSFilter();
+    hideDOYFilter();
+    
+    // Reset storage toggle visuals (optional, they stay as is)
+    // Update GPC display
+    updateTopBar();
+    
+    // Focus username input
+    document.getElementById('username-input').focus();
+    
+    showConnectionSuccess('Logged out successfully. Enter your name to start again.');
+  }
+});
+
   
   // Initial toggle to permanent storage (sets everything up correctly)
   setTimeout(() => {
