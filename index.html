@@ -1728,40 +1728,71 @@ h1 {
 
 <div id="connection-status" class="connection-status"></div>
 
-<!-- STORAGE + ROOM CONTROLS -->
-<div class="storage-toggle" style="display:flex; align-items:center; gap:10px;">
+<div class="storage-toggle" style="display:flex; align-items:center; gap:10px; width:100%;">
   
   <!-- Existing buttons -->
-  <button id="storage-temp">Temporary Storage</button>
-  <button id="storage-permanent" class="active">Permanent Storage</button>
+  <button id="storage-temp" style="display:none;">Temporary Storage</button>
+  
+  <button id="storage-permanent" class="active">
+    Global
+  </button>
   
   <!-- Push room controls to right -->
-  <div style="margin-left:auto; display:flex; align-items:center; gap:6px;">
+  <div style="margin-left:auto; display:flex; align-items:center; gap:10px; flex-shrink:0;">
     
-    <span id="roomLabel" style="font-size:11px; opacity:0.6;"></span>
-    
-    <button onclick="createRoom()" style="
-      background:none;
+    <span id="roomLabel" style="font-size:11px; opacity:0.6; white-space:nowrap;"></span>
+
+    <!-- Zen input -->
+    <input id="roomInput" placeholder="room"
+      style="
+        font-size:11px;
+        padding:2px 6px;
+        border-radius:6px;
+        border:1px solid rgba(0,0,0,0.15);
+        background:transparent;
+        outline:none;
+        width:70px;
+        opacity:0.7;
+      " />
+
+    <!-- Join (mossy circle) -->
+    <button onclick="joinRoom()" style="
+      width:26px;
+      height:26px;
+      border-radius:50%;
       border:none;
+      background:rgba(80,120,80,0.15);
+      font-size:12px;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      opacity:0.85;
+    ">
+      ↩️
+    </button>
+    
+    <!-- Create (mossy circle) -->
+    <button onclick="createRoom()" style="
+      width:28px;
+      height:28px;
+      border-radius:50%;
+      border:none;
+      background:rgba(80,120,80,0.2);
       font-size:16px;
       cursor:pointer;
-      opacity:0.8;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      opacity:0.9;
     ">
       ＋
     </button>
     
-    <button onclick="copyInvite()" style="
-      background:none;
-      border:none;
-      font-size:14px;
-      cursor:pointer;
-      opacity:0.8;
-    ">
-      🔗
-    </button>
-    
   </div>
 </div>
+
+
 
 <!-- NEW DOM FILTER CONTAINER -->
 <div id="dom-filter-container">
@@ -2069,6 +2100,14 @@ h1 {
 
 
 <script>
+function joinRoom() {
+  const input = document.getElementById("roomInput");
+  const value = input.value.trim();
+  
+  if (!value) return;
+  
+  window.location.href = `?room=${value}`;
+}
 function getRoomId() {
   const params = new URLSearchParams(window.location.search);
   return params.get("room") || "global";
