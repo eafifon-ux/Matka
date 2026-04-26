@@ -1733,9 +1733,9 @@ h1 {
   <!-- Existing buttons -->
   <button id="storage-temp" style="display:none;">Temporary Storage</button>
   
-  <button id="storage-permanent" class="active">
-    Global
-  </button>
+<button id="storage-permanent" class="active" onclick="goGlobal()">
+  Global
+</button>
   
   <!-- Push room controls to right -->
   <div style="margin-left:auto; display:flex; align-items:center; gap:10px; flex-shrink:0;">
@@ -2121,9 +2121,8 @@ function createRoom() {
   window.location.href = `?room=${newRoomId}`;
 }
 
-function copyInvite() {
-  navigator.clipboard.writeText(window.location.href);
-  alert("Invite link copied!");
+function goGlobal() {
+  window.location.href = window.location.pathname;
 }
 
 document.getElementById("roomLabel").textContent =
