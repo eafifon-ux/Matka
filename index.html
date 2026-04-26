@@ -2130,7 +2130,7 @@ function joinRoom() {
   
   if (!value) return;
   
-  window.location.href = `?room=${value}`;
+  switchRoom(value);
 }
 function getRoomId() {
   const params = new URLSearchParams(window.location.search);
@@ -2144,16 +2144,41 @@ function getRoomId() {
   return "global";
 }
 
-const roomId = getRoomId();
+let roomId = getRoomId();
 console.log("Room ID:", roomId);
 
 function createRoom() {
   const newRoomId = crypto.randomUUID();
-  window.location.href = `?room=${newRoomId}`;
+  switchRoom(newRoomId);
 }
 
 function goGlobal() {
-  window.location.href = window.location.pathname;
+  switchRoom("global");
+}
+
+function switchRoom(newRoomId) {
+  roomId = newRoomId;
+  
+  // Update URL without reload
+  const url = new URL(window.location);
+  url.searchParams.set("room", newRoomId);
+  window.history.pushState({}, "", url);
+  
+  // Update title
+  const title = document.getElementById("chatTitle");
+  if (title) {
+    title.textContent =
+      roomId === "global" ?
+      "Global" :
+      "Room " + roomId.slice(0, 4);
+  }
+  
+  // Clear messages UI
+  const chat = document.getElementById("chat");
+  if (chat) chat.innerHTML = "";
+  
+  // Reload messages
+  loadMessages();
 }
 
 const title = document.getElementById("chatTitle");
