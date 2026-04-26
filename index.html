@@ -1789,6 +1789,10 @@ h1 {
       ＋
     </button>
     
+    <label style="font-size:11px; opacity:0.6; display:flex; align-items:center; gap:4px;">
+  <input type="checkbox" id="rememberRoom" /> stay
+</label>
+    
   </div>
 </div>
 
@@ -2015,8 +2019,8 @@ h1 {
 
 <div id="chat-container">
   <div id="chat-header">
-    <h3>Matka Messaging</h3>
-    <div>
+  <h3 id="chatTitle">Matka Messaging</h3>
+  <div>
       You: <span id="user-display"></span>
     </div>
   </div>
@@ -2100,6 +2104,26 @@ h1 {
 
 
 <script>
+const rememberCheckbox = document.getElementById("rememberRoom");
+
+rememberCheckbox.addEventListener("change", () => {
+  if (rememberCheckbox.checked) {
+    localStorage.setItem("rememberedRoom", roomId);
+  } else {
+    localStorage.removeItem("rememberedRoom");
+  }
+});
+window.addEventListener("DOMContentLoaded", () => {
+  const title = document.getElementById("chatTitle");
+
+  if (!title) return;
+
+  if (roomId === "global") {
+    title.textContent = "Global";
+  } else {
+    title.textContent = "Room " + roomId.slice(0, 4);
+  }
+});
 function joinRoom() {
   const input = document.getElementById("roomInput");
   const value = input.value.trim();
@@ -2110,7 +2134,14 @@ function joinRoom() {
 }
 function getRoomId() {
   const params = new URLSearchParams(window.location.search);
-  return params.get("room") || "global";
+  const urlRoom = params.get("room");
+  
+  if (urlRoom) return urlRoom;
+  
+  const remembered = localStorage.getItem("rememberedRoom");
+  if (remembered) return remembered;
+  
+  return "global";
 }
 
 const roomId = getRoomId();
@@ -2125,8 +2156,23 @@ function goGlobal() {
   window.location.href = window.location.pathname;
 }
 
-document.getElementById("roomLabel").textContent =
-  "Room: " + roomId.slice(0, 6);
+const title = document.getElementById("chatTitle");
+
+if (title) {
+  title.textContent =
+    roomId === "global" ?
+    "Global" :
+    "Room " + roomId.slice(0, 4);
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  const checkbox = document.getElementById("rememberRoom");
+  const remembered = localStorage.getItem("rememberedRoom");
+  
+  if (checkbox && remembered === roomId) {
+    checkbox.checked = true;
+  }
+});
 /* ===============================
    CONFIGURATION
 =============================== */
