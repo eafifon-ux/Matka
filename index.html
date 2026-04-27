@@ -1716,6 +1716,62 @@ h1 {
   flex-direction: row-reverse;
 }
 
+/* Add to your existing CSS */
+#breakdown-modal #breakdown-result {
+  white-space: pre-wrap;       /* Preserve line breaks */
+  font-family: 'Courier New', monospace;
+  line-height: 1.6;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+/* Style tables if present */
+#breakdown-modal table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 10px 0;
+}
+
+#breakdown-modal td, #breakdown-modal th {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+#breakdown-modal tr:nth-child(even) {
+  background-color: #f2f2f2;
+}
+
+#breakdown-modal th {
+  background-color: #4CAF50;
+  color: white;
+}
+
+/* Style headers */
+#breakdown-modal h1, #breakdown-modal h2, #breakdown-modal h3, #breakdown-modal h4 {
+  margin-top: 20px;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+#breakdown-modal h1 { font-size: 24px; }
+#breakdown-modal h2 { font-size: 20px; }
+#breakdown-modal h3 { font-size: 18px; }
+#breakdown-modal h4 { font-size: 16px; }
+
+/* Style lists */
+#breakdown-modal ul, #breakdown-modal ol {
+  margin-left: 20px;
+  margin-bottom: 10px;
+}
+
+#breakdown-modal li {
+  margin-bottom: 5px;
+}
 
 </style>
 </head>
@@ -2181,6 +2237,8 @@ function switchRoom(newRoomId) {
 =============================== */
 let SUNABASE_URL = "https://gbftoixirwguzymqutwv.supabase.co";
 let SUNABASE_KEY = "sb_publishable_Y-725qBm1ttiRtvm7U3yMg_ZRoW04Tl";
+
+
 let supabaseClient = null;
 let useSunabase = true; // PERMANENT storage is now DEFAULT
 
@@ -3732,6 +3790,184 @@ async function loadMessages() {
   }
 }
 
+/* ===============================
+   AI BREAKDOWN FEATURE
+=============================== */
+async function requestBreakdown(text, sender) {
+  const SUPABASE_URL = 'https://gbftoixirwguzymqutwv.supabase.co'
+  const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZnRvaXhpcndndXp5bXF1dHd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3ODMxMzksImV4cCI6MjA5MjM1OTEzOX0.Nf5vnRMmm_ceEGuqT_aZtRu3uliecnHFqwWaBlmetQo'
+  
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/breakdown`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${ANON_KEY}`
+      },
+      body: JSON.stringify({ text: text })
+    })
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    // Show modal with data.breakdown
+    const modal = document.getElementById('breakdown-modal')
+    document.getElementById('breakdown-original').textContent = `"${text}" — ${sender}`
+    
+    // Convert markdown to HTML for better display
+    const htmlContent = markdownToHtml(data.breakdown || data.error)
+    document.getElementById('breakdown-result').innerHTML = htmlContent
+    
+    modal.style.display = 'flex'
+  } catch (error) {
+    console.error('Breakdown fetch failed:', error)
+    alert('Failed to get breakdown. Check console for details.')
+  }
+}
+
+// Simple markdown to HTML converter
+function markdownToHtml(markdown) {
+  if (!markdown) return ''
+  
+  let html = markdown
+  
+  // Parse tables properly
+  html = parseMarkdownTables(html)
+  
+  // Convert headers
+  html = html.replace(/^#{4}\s+(.+)$/gm, '<h4>$1</h4>')
+  html = html.replace(/^#{3}\s+(.+)$/gm, '<h3>$1</h3>')
+  html = html.replace(/^#{2}\s+(.+)$/gm, '<h2>$1</h2>')
+  html = html.replace(/^#{1}\s+(.+)$/gm, '<h1>$1</h1>')
+  
+  // Convert bold
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  
+  // Convert italic
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>')
+  
+  // Convert code blocks
+  html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+  
+  // Convert inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
+  
+  // Convert unordered lists
+  html = html.replace(/^\s*[-*]\s+(.+)$/gm, '<li>$1</li>')
+  
+  // Convert ordered lists
+  html = html.replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>')
+  
+  // Group list items into ul/ol
+  html = html.replace(/(<li>.*?<\/li>\n?)+/g, function(match) {
+    if (match.includes('<li>1.')) {
+      return '<ol>' + match + '</ol>'
+    }
+    return '<ul>' + match + '</ul>'
+  })
+  
+  // Convert line breaks
+  html = html.replace(/\n\n/g, '</p><p>')
+  html = html.replace(/\n/g, '<br>')
+  
+  // Wrap in paragraph
+  if (!html.startsWith('<')) {
+    html = '<p>' + html + '</p>'
+  }
+  
+  // Clean up empty paragraphs
+  html = html.replace(/<p><\/p>/g, '')
+  html = html.replace(/<p><br><\/p>/g, '')
+  
+  return html
+}
+
+function parseMarkdownTables(markdown) {
+  // Find table sections
+  const lines = markdown.split('\n')
+  let inTable = false
+  let tableContent = []
+  let result = []
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    
+    // Check if this line starts a table (contains | and -)
+    if (line.includes('|') && (line.includes('---') || line.includes(':-'))) {
+      inTable = true
+      tableContent = [lines[i-1] || '', line] // Start with header and separator
+    } 
+    // Check if still in table
+    else if (inTable && line.includes('|')) {
+      tableContent.push(line)
+    }
+    // Table ended
+    else if (inTable && !line.includes('|')) {
+      result.push(convertTableToHtml(tableContent))
+      inTable = false
+      tableContent = []
+      result.push(line)
+    }
+    // Not in table
+    else {
+      result.push(line)
+    }
+  }
+  
+  // Handle table at end of content
+  if (inTable) {
+    result.push(convertTableToHtml(tableContent))
+  }
+  
+  return result.join('\n')
+}
+
+function convertTableToHtml(tableLines) {
+  if (tableLines.length < 2) return tableLines.join('\n')
+  
+  const headerRow = tableLines[0]
+  const separatorRow = tableLines[1]
+  const bodyRows = tableLines.slice(2)
+  
+  // Parse headers
+  const headers = headerRow.split('|')
+    .filter(cell => cell.trim() !== '')
+    .map(cell => cell.trim())
+  
+  // Build HTML table
+  let html = '<div class="table-container"><table><thead><tr>'
+  
+  // Add headers
+  headers.forEach(header => {
+    html += `<th>${header}</th>`
+  })
+  
+  html += '</tr></thead><tbody>'
+  
+  // Add body rows
+  bodyRows.forEach(row => {
+    if (!row.trim()) return
+    
+    const cells = row.split('|')
+      .filter(cell => cell.trim() !== '')
+      .map(cell => cell.trim())
+    
+    if (cells.length === 0) return
+    
+    html += '<tr>'
+    cells.forEach(cell => {
+      html += `<td>${cell}</td>`
+    })
+    html += '</tr>'
+  })
+  
+  html += '</tbody></table></div>'
+  return html
+}
+
 
 function renderMessages(messages) {
   const container = document.getElementById("messages");
@@ -3907,6 +4143,29 @@ messageHTML += `
 // Use the small clipboard icon (copy button) to copy the full message instead
 
 // No more touchstart / mousedown long-press listeners
+let longPressTimer = null;
+
+// Touch devices
+div.addEventListener('touchstart', (e) => {
+  longPressTimer = setTimeout(() => {
+    e.preventDefault();
+    requestBreakdown(textField, fromField);
+  }, 600); // 600 ms = long press
+});
+
+div.addEventListener('touchend', () => clearTimeout(longPressTimer));
+div.addEventListener('touchmove', () => clearTimeout(longPressTimer));
+
+// Mouse / desktop
+div.addEventListener('mousedown', (e) => {
+  longPressTimer = setTimeout(() => {
+    e.preventDefault();
+    requestBreakdown(textField, fromField);
+  }, 600);
+});
+
+div.addEventListener('mouseup', () => clearTimeout(longPressTimer));
+div.addEventListener('mouseleave', () => clearTimeout(longPressTimer));
 
 container.appendChild(div);
 });
@@ -4104,6 +4363,17 @@ document.addEventListener("DOMContentLoaded", () => {
       hideEditOverlay();
     }
   });
+  
+    // Close breakdown modal
+  document.getElementById('breakdown-close-btn').addEventListener('click', () => {
+    document.getElementById('breakdown-modal').style.display = 'none';
+  });
+  document.getElementById('breakdown-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'breakdown-modal') {
+      e.target.style.display = 'none';
+    }
+  });
+
   
   // Allow Enter key to save in edit overlay (but Shift+Enter for new line)
   document.getElementById('edit-overlay-textarea').addEventListener('keydown', (e) => {
@@ -4444,6 +4714,23 @@ window.addEventListener("beforeunload", () => {
 });
 </script>
 
+<!-- AI Breakdown Modal -->
+<div id="breakdown-modal" class="edit-overlay" style="display:none;">
+  <div class="edit-overlay-content">
+    <h4>🔍 AI Breakdown</h4>
+    <div id="breakdown-original" style="
+      background:#f8f9ff; padding:12px; border-radius:6px;
+      margin:10px 0; font-size:0.95em; border-left:3px solid #1e6cff;
+    "></div>
+    <div id="breakdown-result" style="
+      background:#fff8e6; padding:12px; border-radius:6px;
+      min-height:60px; line-height:1.6;
+    ">Requesting breakdown…</div>
+    <div class="edit-overlay-buttons" style="margin-top:15px;">
+      <button id="breakdown-close-btn" class="edit-overlay-cancel">Close</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
