@@ -1731,7 +1731,7 @@ h1 {
 <div class="storage-toggle" style="display:flex; align-items:center; gap:10px; width:100%;">
   
   <!-- Existing buttons -->
-  <button id="storage-temp" style="display:none;">Temporary Storage</button>
+
   
 <button id="storage-permanent" class="active" onclick="goGlobal()">
   Global
@@ -1958,45 +1958,29 @@ h1 {
 <div class="admin-controls" id="admin-controls">
   <h4>🔧 Admin Controls</h4>
   <div class="buttons">
-    <button id="delete-all-btn">🗑️ Delete All Permanent Messages</button>
+  <button id="delete-all-btn">🗑️ Delete All in This Room</button>
     <button id="delete-old-btn">📅 Delete Messages Older Than 1 Day</button>
-    <button id="clear-temp-btn">🧹 Clear Temporary Storage</button>
+    
   </div>
   
-  <!-- PASSWORD CONTROLS -->
-  <div class="password-controls">
-    <h5>🔐 Password Protection</h5>
-    
-    <div class="password-setting">
-      <label>Temporary Storage Password:</label>
-      <input type="password" id="temp-password-input" placeholder="Enter password for temporary storage">
-      <div class="password-toggle">
-        <input type="checkbox" id="temp-password-enabled">
-        <label for="temp-password-enabled">Enable password protection</label>
-      </div>
-    </div>
-    
-    <div class="password-setting">
-      <label>Permanent Storage Password:</label>
-      <input type="password" id="perm-password-input" placeholder="Enter password for permanent storage">
-      <div class="password-toggle">
-        <input type="checkbox" id="perm-password-enabled">
-        <label for="perm-password-enabled">Enable password protection</label>
-      </div>
-    </div>
-    
-    <div class="password-buttons">
-      <button id="set-temp-password-btn">Set Temp Password</button>
-      <button id="set-perm-password-btn">Set Perm Password</button>
-      <button id="remove-passwords-btn">Remove All Passwords</button>
-    </div>
-    
-    <!-- INDIVIDUAL PASSWORD REMOVAL FOR ADMINS -->
-    <div class="individual-password-buttons">
-      <button id="remove-temp-password-btn">Remove Temp Password Only</button>
-      <button id="remove-perm-password-btn">Remove Perm Password Only</button>
-    </div>
+<!-- PASSWORD CONTROLS -->
+<div class="password-controls">
+  <h5>🔐 Password Protection</h5>
+
+  <div class="password-setting">
+    <label for="password-enabled">
+      <input type="checkbox" id="password-enabled" />
+      Enable storage password
+    </label>
+    <input type="text" id="password-input" placeholder="Enter password" />
   </div>
+
+  <div class="password-buttons">
+    <button id="set-password-btn">Set Password</button>
+    <button id="remove-password-btn">Remove Password</button>
+  </div>
+</div>
+
 </div>
 
 <div id="controls">
@@ -2158,50 +2142,43 @@ function goGlobal() {
 
 function switchRoom(newRoomId) {
   roomId = newRoomId;
-  
-  // Update URL without reload
   const url = new URL(window.location);
   url.searchParams.set("room", newRoomId);
   window.history.pushState({}, "", url);
-  
+
   // Update title
   const title = document.getElementById("chatTitle");
   if (title) {
-    title.textContent =
-      roomId === "global" ?
-      "Global" :
-      "Room " + roomId.slice(0, 4);
+    title.textContent = roomId === "global" ? "Global" : "Room " + roomId.slice(0, 4);
   }
-  
-  // Clear messages UI
-  const chat = document.getElementById("chat");
-  if (chat) chat.innerHTML = "";
-  
-  // Reload messages
-  loadMessages();
+
+  // Clear all filters
+  clearDayFilter();
+  clearDOMFilter();
+  clearDOSFilter();
+  clearDOYFilter();
+  heptad = false;                     // turn off heptad mode
+  document.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
+  document.querySelector('button[data-mode="DOY"]').classList.add("active");
+  hideWeekFilter();
+  hideDOMFilter();
+  hideDOSFilter();
+  hideDOYFilter();
+
+  // Clear messages container
+  const container = document.getElementById("messages");
+  if (container) container.innerHTML = '<div class="empty-state">Loading messages…</div>';
+
+  // Reload messages (with new room)
+  if (currentUser) loadMessages();
+
+  // Save remembered room
+  localStorage.setItem("rememberedRoom", newRoomId);
 }
 
-const title = document.getElementById("chatTitle");
-
-if (title) {
-  title.textContent =
-    roomId === "global" ?
-    "Global" :
-    "Room " + roomId.slice(0, 4);
-}
-
-window.addEventListener("DOMContentLoaded", () => {
-  const checkbox = document.getElementById("rememberRoom");
-  const remembered = localStorage.getItem("rememberedRoom");
-  
-  if (checkbox && remembered === roomId) {
-    checkbox.checked = true;
-  }
-});
 /* ===============================
    CONFIGURATION
 =============================== */
-let SERVER = "https://matka-1iig.onrender.com";
 let SUNABASE_URL = "https://gbftoixirwguzymqutwv.supabase.co";
 let SUNABASE_KEY = "sb_publishable_Y-725qBm1ttiRtvm7U3yMg_ZRoW04Tl";
 let supabaseClient = null;
@@ -2210,12 +2187,9 @@ let useSunabase = true; // PERMANENT storage is now DEFAULT
 // Admin password (simple client-side check - for demo only)
 const ADMIN_PASSWORD = "matka123";
 let isAdmin = false;
+let passwordEnabled = false;
+let password = "";
 
-// Password protection storage
-let tempPasswordEnabled = false;
-let permPasswordEnabled = false;
-let tempPassword = "";
-let permPassword = "";
 
 // NEW: Edit overlay state
 let editingMessageId = null;
@@ -2234,86 +2208,66 @@ let domFilterActive = false;
 
 // Load saved passwords from localStorage
 function loadPasswordSettings() {
-  const savedTempEnabled = localStorage.getItem('tempPasswordEnabled');
-  const savedPermEnabled = localStorage.getItem('permPasswordEnabled');
-  const savedTempPass = localStorage.getItem('tempPassword');
-  const savedPermPass = localStorage.getItem('permPassword');
+  const savedEnabled = localStorage.getItem('permPasswordEnabled');
+  const savedPass = localStorage.getItem('permPassword');
   
-  if (savedTempEnabled !== null) tempPasswordEnabled = savedTempEnabled === 'true';
-  if (savedPermEnabled !== null) permPasswordEnabled = savedPermEnabled === 'true';
-  if (savedTempPass) tempPassword = savedTempPass;
-  if (savedPermPass) permPassword = savedPermPass;
+  if (savedEnabled !== null) passwordEnabled = savedEnabled === 'true';
+  if (savedPass) password = savedPass;
   
-  // Update UI if admin controls are visible
-  if (isAdmin) {
-    updatePasswordUI();
-  }
-  
-  // Update password status indicator
+  if (isAdmin) updatePasswordUI();
   updatePasswordStatusIndicator();
 }
 
+
+
+
 function savePasswordSettings() {
-  localStorage.setItem('tempPasswordEnabled', tempPasswordEnabled.toString());
-  localStorage.setItem('permPasswordEnabled', permPasswordEnabled.toString());
-  localStorage.setItem('tempPassword', tempPassword);
-  localStorage.setItem('permPassword', permPassword);
+  localStorage.setItem('passwordEnabled', passwordEnabled.toString());
+  localStorage.setItem('password', password);
   updatePasswordStatusIndicator();
 }
+
 
 function updatePasswordStatusIndicator() {
   const indicator = document.getElementById('password-status-indicator');
   if (!indicator) return;
   
-  const currentStorage = useSunabase ? 'permanent' : 'temporary';
-  const isProtected = currentStorage === 'permanent' ? permPasswordEnabled : tempPasswordEnabled;
+  const isProtected = passwordEnabled;
   
   if (isProtected) {
-    indicator.textContent = `🔒 ${currentStorage.charAt(0).toUpperCase() + currentStorage.slice(1)} Password Protected`;
+    indicator.textContent = '🔒 Permanent Password Protected';
     indicator.className = 'password-status protected';
   } else {
-    indicator.textContent = `🔓 ${currentStorage.charAt(0).toUpperCase() + currentStorage.slice(1)} Unprotected`;
+    indicator.textContent = '🔓 Unprotected';
     indicator.className = 'password-status unprotected';
   }
 }
 
+
+
 function updatePasswordUI() {
-  document.getElementById('temp-password-enabled').checked = tempPasswordEnabled;
-  document.getElementById('perm-password-enabled').checked = permPasswordEnabled;
-  document.getElementById('temp-password-input').value = tempPassword;
-  document.getElementById('perm-password-input').value = permPassword;
+  document.getElementById('password-enabled').checked = passwordEnabled;
+  document.getElementById('password-input').value = password;
 }
+
 
 // FIXED: Check password BEFORE user can start chatting
 function checkStoragePasswordBeforeStart(storageType) {
-  const isEnabled = storageType === 'permanent' ? permPasswordEnabled : tempPasswordEnabled;
-  const password = storageType === 'permanent' ? permPassword : tempPassword;
-  
-  if (isEnabled && password) {
-    const enteredPassword = prompt(`Enter password for ${storageType} storage:`);
+  // Only permanent password exists now
+  if (storageType === 'permanent' && passwordEnabled && password) {
+    const enteredPassword = prompt(`Enter password for permanent storage:`);
     if (enteredPassword !== password) {
-      showConnectionError(`Incorrect password for ${storageType} storage`);
+      showConnectionError(`Incorrect password for permanent storage`);
       return false;
     }
   }
   return true;
 }
 
+
+
 // FIXED: Check password when switching storage types
-function checkStoragePasswordWhenSwitching(newStorageType) {
-  const isEnabled = newStorageType === 'permanent' ? permPasswordEnabled : tempPasswordEnabled;
-  const password = newStorageType === 'permanent' ? permPassword : tempPassword;
-  
-  if (isEnabled && password) {
-    const enteredPassword = prompt(`Enter password for ${newStorageType} storage:`);
-    if (enteredPassword !== password) {
-      showConnectionError(`Incorrect password for ${newStorageType} storage`);
-      return false;
-    }
-  }
-  updatePasswordStatusIndicator();
-  return true;
-}
+
 
 // NEW: Check if user wants admin access
 function checkAdminAccess(username) {
@@ -2627,6 +2581,7 @@ function hideDOMFilter() {
   const container = document.getElementById('dom-filter-container');
   container.style.display = 'none';
   domFilterActive = false;
+  currentDOMFilter = null; 
 }
 
 function generateDOMCalendar() {
@@ -3125,6 +3080,7 @@ function showWeekFilter() {
   // Hide DOM filter if it's visible
   domContainer.style.display = 'none';
   domFilterActive = false;
+  currentDOMFilter = null; 
   
   // Show week filter TABLE
   container.style.display = 'block';
@@ -3242,8 +3198,8 @@ function filterMessages(messages) {
     filtered = filterMessagesByDOS(filtered);
   }
 
-  // Then apply week or DOM filter (still mutually exclusive with each other)
-  if (currentDayFilter !== null) {
+  // Apply week filter ONLY if DOM filter is NOT active
+  if (currentDayFilter !== null && currentDOMFilter === null) {
     filtered = filterMessagesByDay(filtered);
   } else if (currentDOMFilter !== null) {
     filtered = filterMessagesByDOM(filtered);
@@ -3251,6 +3207,7 @@ function filterMessages(messages) {
 
   return filtered;
 }
+
 
 
 
@@ -3416,101 +3373,33 @@ function hideConfirmation() {
 /* ===============================
    PASSWORD PROTECTION FUNCTIONS
 =============================== */
-function setTempPassword() {
-  const newPassword = document.getElementById('temp-password-input').value;
-  const enabled = document.getElementById('temp-password-enabled').checked;
-  
+
+
+function setPassword() {
+  const enabled = document.getElementById('password-enabled').checked;
+  const newPassword = document.getElementById('password-input').value;
   if (enabled && !newPassword) {
     showConnectionError('Please enter a password');
     return;
   }
-  
-  tempPasswordEnabled = enabled;
-  tempPassword = newPassword;
+  passwordEnabled = enabled;
+  password = newPassword;
   savePasswordSettings();
-  
-  if (enabled) {
-    showConnectionSuccess(`Temporary storage password ${newPassword ? 'set' : 'removed'}`);
-  } else {
-    showConnectionSuccess('Temporary storage password protection disabled');
-  }
+  showConnectionSuccess(enabled ? 'Password set' : 'Password disabled');
 }
 
-function setPermPassword() {
-  const newPassword = document.getElementById('perm-password-input').value;
-  const enabled = document.getElementById('perm-password-enabled').checked;
-  
-  if (enabled && !newPassword) {
-    showConnectionError('Please enter a password');
-    return;
-  }
-  
-  permPasswordEnabled = enabled;
-  permPassword = newPassword;
-  savePasswordSettings();
-  
-  if (enabled) {
-    showConnectionSuccess(`Permanent storage password ${newPassword ? 'set' : 'removed'}`);
-  } else {
-    showConnectionSuccess('Permanent storage password protection disabled');
-  }
-}
-
-function removeTempPasswordOnly() {
-  if (confirm('Remove temporary storage password only? This will keep permanent storage password intact.')) {
-    tempPasswordEnabled = false;
-    tempPassword = "";
+function removePassword() {
+  if (confirm('Remove password protection?')) {
+    passwordEnabled = false;
+    password = "";
     savePasswordSettings();
     updatePasswordUI();
-    showConnectionSuccess('Temporary storage password removed');
+    showConnectionSuccess('Password removed');
   }
 }
 
-function removePermPasswordOnly() {
-  if (confirm('Remove permanent storage password only? This will keep temporary storage password intact.')) {
-    permPasswordEnabled = false;
-    permPassword = "";
-    savePasswordSettings();
-    updatePasswordUI();
-    showConnectionSuccess('Permanent storage password removed');
-  }
-}
 
-function removeAllPasswords() {
-  if (confirm('Remove all password protection? This will make both storage types accessible without passwords.')) {
-    tempPasswordEnabled = false;
-    permPasswordEnabled = false;
-    tempPassword = "";
-    permPassword = "";
-    savePasswordSettings();
-    updatePasswordUI();
-    showConnectionSuccess('All passwords removed');
-  }
-}
 
-async function deleteAllPermanentMessages() {
-  if (!supabaseClient) {
-    showConnectionError('Permanent storage not connected');
-    return;
-  }
-  
-  try {
-    const { error } = await supabaseClient
-      .from('messages')
-      .delete()
-      .neq('id', 0);
-    
-    if (error) {
-      throw new Error(error.message);
-    }
-    
-    showConnectionSuccess('All permanent messages deleted successfully!');
-    loadMessages();
-    
-  } catch (error) {
-    showConnectionError(`Failed to delete messages: ${error.message}`);
-  }
-}
 
 async function deleteOldPermanentMessages() {
   if (!supabaseClient) {
@@ -3565,6 +3454,22 @@ async function deleteSingleMessage(messageId) {
   }
 }
 
+async function deleteAllMessagesInCurrentRoom() {
+  if (!supabaseClient) return;
+  try {
+    const { error } = await supabaseClient
+      .from('messages')
+      .delete()
+      .eq('room_id', roomId);  // only current room
+    if (error) throw error;
+    showConnectionSuccess(`Deleted all messages in room "${roomId}"`);
+    loadMessages();
+  } catch (err) {
+    showConnectionError(`Delete failed: ${err.message}`);
+  }
+}
+
+
 // ADMIN: Delete ANY message (not just own messages)
 async function deleteAnyMessage(messageId) {
   if (!supabaseClient) {
@@ -3614,22 +3519,7 @@ async function editMessage(messageId, newText) {
   }
 }
 
-async function clearTemporaryStorage() {
-  try {
-    showConnectionSuccess('Note: Temporary storage messages will expire automatically when server restarts');
-    
-    currentMessages = [];
-    renderMessages([]);
-    
-    const messageCountEl = document.getElementById('message-count');
-    if (messageCountEl) {
-      messageCountEl.textContent = ' • 0 messages';
-    }
-    
-  } catch (error) {
-    showConnectionError(`Failed to clear temporary storage: ${error.message}`);
-  }
-}
+
 
 /* ===============================
    FORMATTER
@@ -3684,46 +3574,7 @@ function initializeSunabase() {
 /* ===============================
    STORAGE TOGGLE
 =============================== */
-function toggleStorage(storageType) {
-  // Check password when switching
-  const newUseSunabase = storageType === 'permanent';
-  if (newUseSunabase !== useSunabase) {
-    if (!checkStoragePasswordWhenSwitching(storageType)) {
-      return; // Password check failed, don't switch
-    }
-  }
-  
-  useSunabase = newUseSunabase;
-  
-  document.getElementById('storage-temp').classList.toggle('active', !useSunabase);
-  document.getElementById('storage-permanent').classList.toggle('active', useSunabase);
-  document.getElementById('storage-status').textContent = useSunabase ? 'Permanent' : 'Temporary';
-  
-  // Show admin controls if admin is active AND we're in permanent storage
-  if (isAdmin && useSunabase) {
-    document.getElementById('admin-controls').style.display = 'block';
-  } else {
-    document.getElementById('admin-controls').style.display = 'none';
-  }
-  
-  if (messageInterval) {
-    clearInterval(messageInterval);
-    messageInterval = null;
-  }
-  
-  if (useSunabase && !supabaseClient) {
-    if (initializeSunabase()) {
-      showConnectionSuccess('Connected to permanent storage!');
-    } else {
-      showConnectionError('Failed to connect to permanent storage');
-    }
-  }
-  
-  if (currentUser) {
-    loadMessages();
-    messageInterval = setInterval(loadMessages, 2000);
-  }
-}
+
 
 /* ===============================
    USER SETUP - FIXED PASSWORD CHECK (NOW ASKS FOR BOTH PASSWORDS)
@@ -3821,55 +3672,32 @@ function escapeHtml(text) {
 
 async function loadMessages() {
   try {
-    if (useSunabase) {
-      if (!supabaseClient) {
-        if (!initializeSunabase()) {
-          throw new Error('Permanent storage not available');
-        }
+    if (!supabaseClient) {
+      if (!initializeSunabase()) {
+        throw new Error('Permanent storage not available');
       }
-      
-      const { data: messages, error } = await supabaseClient
-.from('messages')
-.select('*')
-.eq('room_id', roomId) // ✅ THIS is Step 3
-.order('timestamp', { ascending: true });
-      
-      if (error) {
-        throw new Error(`Permanent storage: ${error.message}`);
-      }
-      
-      currentMessages = messages || [];
-      
-    } else {
-      const response = await fetch(`${SERVER}/messages?_=${Date.now()}`, {
-        method: "GET",
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Pragma": "no-cache",
-          "Expires": "0"
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Temporary storage: ${response.status}`);
-      }
-      
-      const messages = await response.json();
-      currentMessages = messages;
     }
-    
-    // Apply both filters (week and DOM)
+
+    const { data: messages, error } = await supabaseClient
+      .from('messages')
+      .select('*')
+      .eq('room_id', roomId)
+      .order('timestamp', { ascending: true });
+
+    if (error) {
+      throw new Error(`Permanent storage: ${error.message}`);
+    }
+
+    currentMessages = messages || [];
+
     const filteredMessages = filterMessages(currentMessages);
-    
     renderMessages(filteredMessages);
-    
+
     const count = filteredMessages.length;
     const totalCount = currentMessages.length;
     const messageCountEl = document.getElementById('message-count');
     if (messageCountEl) {
-            let filterText = '';
-
+      let filterText = '';
       if (currentDayFilter !== null && currentDOMFilter !== null) {
         filterText = ` (${dayNames[currentDayFilter]} & day ${currentDOMFilter} only)`;
       } else if (currentDayFilter !== null) {
@@ -3881,37 +3709,29 @@ async function loadMessages() {
       } else if (dosFilterActive && currentSeason !== null) {
         filterText = ` (${seasonNames[currentSeason - 1]} only)`;
       }
-
-      
       messageCountEl.textContent = ` • ${count} of ${totalCount} messages${filterText}`;
     }
-    
+
     const statusDot = document.querySelector('.status-dot');
-    if (statusDot) {
-      statusDot.style.background = '#4CAF50';
-    }
-    
+    if (statusDot) statusDot.style.background = '#4CAF50';
+
   } catch (error) {
     console.error("Failed to load messages:", error);
-    
     const statusDot = document.querySelector('.status-dot');
-    if (statusDot) {
-      statusDot.style.background = '#F44336';
-    }
-    
+    if (statusDot) statusDot.style.background = '#F44336';
+
     const container = document.getElementById("messages");
     if (container && currentMessages.length === 0) {
-      const storageType = useSunabase ? 'permanent' : 'temporary';
       container.innerHTML = `
         <div class="message system error">
-          <div class="text">Cannot connect to ${storageType} storage</div>
+          <div class="text">Cannot connect to permanent storage</div>
           <div class="text">Error: ${error.message}</div>
-          <div class="text">Try switching storage type</div>
         </div>
       `;
     }
   }
 }
+
 
 function renderMessages(messages) {
   const container = document.getElementById("messages");
@@ -4124,54 +3944,32 @@ async function sendMessage() {
   input.disabled = true;
   
   try {
-    if (useSunabase) {
-      const messageData = {
-  from_user: currentUser,
-  text: text,
-  timestamp: new Date().toISOString(),
-  room_id: roomId // ✅ THIS is Step 4
-};
-      
-      if (replyingToMessage) {
-        messageData.reply_to_id = replyingToMessage.id;
-        messageData.reply_to_sender = replyingToMessage.sender;
-        messageData.reply_to_text = replyingToMessage.text;
+    const messageData = {
+      from_user: currentUser,
+      text: text,
+      timestamp: new Date().toISOString(),
+      room_id: roomId
+    };
+    
+    if (replyingToMessage) {
+      messageData.reply_to_id = replyingToMessage.id;
+      messageData.reply_to_sender = replyingToMessage.sender;
+      messageData.reply_to_text = replyingToMessage.text;
+    }
+    
+    if (!supabaseClient) {
+      if (!initializeSunabase()) {
+        throw new Error('Permanent storage not available');
       }
-      
-      if (!supabaseClient) {
-        if (!initializeSunabase()) {
-          throw new Error('Permanent storage not available');
-        }
-      }
-      
-      const { data, error } = await supabaseClient
-        .from('messages')
-        .insert([messageData])
-        .select();
-      
-      if (error) {
-        throw new Error(`Failed to save: ${error.message}`);
-      }
-      
-    } else {
-      const response = await fetch(`${SERVER}/messages`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          from: currentUser,
-          text: text,
-          reply_to_id: replyingToMessage?.id,
-          reply_to_sender: replyingToMessage?.sender,
-          reply_to_text: replyingToMessage?.text
-        })
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to send: ${response.status} ${errorText}`);
-      }
+    }
+    
+    const { data, error } = await supabaseClient
+      .from('messages')
+      .insert([messageData])
+      .select();
+    
+    if (error) {
+      throw new Error(`Failed to save: ${error.message}`);
     }
     
     clearReply();
@@ -4187,6 +3985,7 @@ async function sendMessage() {
     input.focus();
   }
 }
+
 
 /* ===============================
    DEBUG FUNCTIONS
@@ -4227,7 +4026,7 @@ async function debugServerResponse() {
   
   let debugContent = "=== MATKA MESSAGING DEBUG ===\n";
   debugContent += `Timestamp: ${new Date().toISOString()}\n`;
-  debugContent += `Storage: ${useSunabase ? 'Permanent (Sunabase)' : 'Temporary (Server)'}\n`;
+  debugContent += `Storage: Permanent (Supabase)\n`;
   debugContent += `Admin Mode: ${isAdmin ? 'ACTIVE' : 'INACTIVE'}\n`;
   debugContent += `Current User: ${currentUser || 'Not set'}\n`;
   debugContent += `Current Messages: ${currentMessages.length}\n`;
@@ -4237,51 +4036,30 @@ async function debugServerResponse() {
   debugContent += `DOM Filter: ${currentDOMFilter !== null ? `Day ${currentDOMFilter}` : 'None'}\n`;
   debugContent += `DOM Filter Active: ${domFilterActive ? 'YES' : 'NO'}\n`;
   debugContent += `Heptad Mode: ${heptad ? 'ON' : 'OFF'}\n`;
-  debugContent += "\n--- Password Protection Status ---\n";
-  debugContent += `Temporary Storage: ${tempPasswordEnabled ? `PROTECTED (Password: "${tempPassword}")` : 'UNPROTECTED'}\n`;
-  debugContent += `Permanent Storage: ${permPasswordEnabled ? `PROTECTED (Password: "${permPassword}")` : 'UNPROTECTED'}\n`;
   debugContent += "\n--- Storage Tests ---\n\n";
   
   try {
-    if (useSunabase) {
-      debugContent += "Testing Permanent Storage (Sunabase):\n";
-      debugContent += `URL: ${SUNABASE_URL}\n`;
-      debugContent += `Initialized: ${supabaseClient ? 'YES' : 'NO'}\n\n`;
-      
-      if (!supabaseClient) {
-        debugContent += "Sunabase not initialized!\n";
-      } else {
-        debugContent += "1. Testing 'messages' table:\n";
-        try {
-          const { data: lowerData, error: lowerError } = await supabaseClient
-            .from('messages')
-            .select('*')
-            .order('timestamp', { ascending: true });
-          
-          if (lowerError) {
-            debugContent += `   Error: ${lowerError.message}\n`;
-          } else {
-            debugContent += `   ✓ Table exists, found ${lowerData?.length || 0} records\n`;
-          }
-        } catch (e) {
-          debugContent += `   Error: ${e.message}\n`;
-        }
-      }
-      
+    debugContent += "Testing Permanent Storage (Supabase):\n";
+    debugContent += `URL: ${SUNABASE_URL}\n`;
+    debugContent += `Initialized: ${supabaseClient ? 'YES' : 'NO'}\n\n`;
+    
+    if (!supabaseClient) {
+      debugContent += "Supabase not initialized!\n";
     } else {
-      debugContent += "Testing Temporary Storage (Server):\n";
-      debugContent += `URL: ${SERVER}\n\n`;
-      
-      debugContent += "1. GET /messages:\n";
+      debugContent += "1. Testing 'messages' table:\n";
       try {
-        const getResponse = await fetch(`${SERVER}/messages`);
-        debugContent += `   Status: ${getResponse.status}\n`;
+        const { data: lowerData, error: lowerError } = await supabaseClient
+          .from('messages')
+          .select('*')
+          .order('timestamp', { ascending: true });
         
-        const getData = await getResponse.json();
-        debugContent += `   Returns array: ${Array.isArray(getData)}\n`;
-        debugContent += `   Message count: ${getData.length}\n`;
-      } catch (error) {
-        debugContent += `   Error: ${error.message}\n`;
+        if (lowerError) {
+          debugContent += `   Error: ${lowerError.message}\n`;
+        } else {
+          debugContent += `   ✓ Table exists, found ${lowerData?.length || 0} records\n`;
+        }
+      } catch (e) {
+        debugContent += `   Error: ${e.message}\n`;
       }
     }
     
@@ -4301,6 +4079,7 @@ async function debugServerResponse() {
     showDebugModal(debugContent);
   }
 }
+
 
 /* ===============================
    INITIALIZATION
@@ -4393,13 +4172,14 @@ document.querySelector('.doy-filter-remove').addEventListener('click', clearDOYF
 
   
   // Admin control button events
-  document.getElementById('delete-all-btn').addEventListener('click', () => {
-    showConfirmation(
-      '⚠️ Delete All Messages',
-      'Are you sure you want to delete ALL permanent messages? This action cannot be undone.',
-      deleteAllPermanentMessages
-    );
-  });
+document.getElementById('delete-all-btn').addEventListener('click', () => {
+  showConfirmation(
+    'Delete All Messages in This Room?',
+    `This will delete all messages in room "${roomId}".`,
+    deleteAllMessagesInCurrentRoom
+  );
+});
+
   
   document.getElementById('delete-old-btn').addEventListener('click', () => {
     showConfirmation(
@@ -4409,20 +4189,11 @@ document.querySelector('.doy-filter-remove').addEventListener('click', clearDOYF
     );
   });
   
-  document.getElementById('clear-temp-btn').addEventListener('click', () => {
-    showConfirmation(
-      '🧹 Clear Temporary Storage',
-      'Clear all temporary messages? Note: These messages auto-expire when server restarts.',
-      clearTemporaryStorage
-    );
-  });
-  
   // Password control button events
-  document.getElementById('set-temp-password-btn').addEventListener('click', setTempPassword);
-  document.getElementById('set-perm-password-btn').addEventListener('click', setPermPassword);
-  document.getElementById('remove-passwords-btn').addEventListener('click', removeAllPasswords);
-  document.getElementById('remove-temp-password-btn').addEventListener('click', removeTempPasswordOnly);
-  document.getElementById('remove-perm-password-btn').addEventListener('click', removePermPasswordOnly);
+  
+document.getElementById('set-password-btn')?.addEventListener('click', setPassword);
+document.getElementById('remove-password-btn')?.addEventListener('click', removePassword);
+
   
   // Confirmation modal events
   document.getElementById('confirm-delete-btn').addEventListener('click', () => {
@@ -4435,8 +4206,8 @@ document.querySelector('.doy-filter-remove').addEventListener('click', clearDOYF
   document.getElementById('cancel-delete-btn').addEventListener('click', hideConfirmation);
   
   // Storage toggle buttons
-  document.getElementById('storage-temp').addEventListener('click', () => toggleStorage('temporary'));
-  document.getElementById('storage-permanent').addEventListener('click', () => toggleStorage('permanent'));
+  
+  
   
   // Mode buttons
   document.querySelectorAll("[data-mode]").forEach(btn => {
@@ -4665,15 +4436,14 @@ document.getElementById('user-display').addEventListener('click', function() {
 
   
   // Initial toggle to permanent storage (sets everything up correctly)
-  setTimeout(() => {
-    toggleStorage('permanent');
-  }, 100);
+  
 });
 
 window.addEventListener("beforeunload", () => {
   if (messageInterval) clearInterval(messageInterval);
 });
 </script>
+
 
 </body>
 </html>
