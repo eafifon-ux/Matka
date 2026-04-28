@@ -3729,65 +3729,37 @@ function escapeHtml(text) {
 }
 
 async function loadMessages() {
-  try {
-    if (!supabaseClient) {
-      if (!initializeSunabase()) {
-        throw new Error('Permanent storage not available');
-      }
-    }
+try {
+if (!supabaseClient) {
+initializeSunabase();
+}
 
-    const { data: messages, error } = await supabaseClient
-      .from('messages')
-      .select('*')
-      .eq('room_id', roomId)
-      .order('timestamp', { ascending: true });
+let query = supabaseClient
+.from('messages')
+.select('*')
+.order('timestamp', { ascending: true });
 
-    if (error) {
-      throw new Error(`Permanent storage: ${error.message}`);
-    }
+if (roomId === "global") {
+query = query.eq('room_name', 'global');
+} else {
+query = query.eq('room_name', roomId); // e.g. "777888"
+}
 
-    currentMessages = messages || [];
+const { data: messages, error } = await query;
 
-    const filteredMessages = filterMessages(currentMessages);
-    renderMessages(filteredMessages);
+if (error) throw error;
 
-    const count = filteredMessages.length;
-    const totalCount = currentMessages.length;
-    const messageCountEl = document.getElementById('message-count');
-    if (messageCountEl) {
-      let filterText = '';
-      if (currentDayFilter !== null && currentDOMFilter !== null) {
-        filterText = ` (${dayNames[currentDayFilter]} & day ${currentDOMFilter} only)`;
-      } else if (currentDayFilter !== null) {
-        filterText = ` (${dayNames[currentDayFilter]} only)`;
-      } else if (currentDOMFilter !== null) {
-        filterText = ` (day ${currentDOMFilter} only)`;
-      } else if (doyFilterActive && currentDOYMonth !== null) {
-        filterText = ` (${doyMonthNames[currentDOYMonth - 1]} only)`;
-      } else if (dosFilterActive && currentSeason !== null) {
-        filterText = ` (${seasonNames[currentSeason - 1]} only)`;
-      }
-      messageCountEl.textContent = ` • ${count} of ${totalCount} messages${filterText}`;
-    }
+currentMessages = messages || [];
+const filteredMessages = filterMessages(currentMessages);
+renderMessages(filteredMessages);
 
-    const statusDot = document.querySelector('.status-dot');
-    if (statusDot) statusDot.style.background = '#4CAF50';
+const countEl = document.getElementById('message-count');
+if (countEl) countEl.textContent = ` • ${filteredMessages.length} messages`;
 
-  } catch (error) {
-    console.error("Failed to load messages:", error);
-    const statusDot = document.querySelector('.status-dot');
-    if (statusDot) statusDot.style.background = '#F44336';
-
-    const container = document.getElementById("messages");
-    if (container && currentMessages.length === 0) {
-      container.innerHTML = `
-        <div class="message system error">
-          <div class="text">Cannot connect to permanent storage</div>
-          <div class="text">Error: ${error.message}</div>
-        </div>
-      `;
-    }
-  }
+} catch (error) {
+console.error(error);
+showConnectionError("Cannot connect to permanent storage: " + error.message);
+}
 }
 
 /* ===============================
@@ -4190,14 +4162,8 @@ async function sendMessage() {
   }
   
   const input = document.getElementById("message-input");
-  if (!input) return;
-  
   const text = input.value.trim();
-  
-  if (!text) {
-    showConnectionError('Please enter a message');
-    return;
-  }
+  if (!text) return;
   
   input.value = '';
   input.disabled = true;
@@ -4207,38 +4173,22 @@ async function sendMessage() {
       from_user: currentUser,
       text: text,
       timestamp: new Date().toISOString(),
-      room_id: roomId
+      room_id: null,
+      room_name: (roomId === "global") ? "global" : roomId // ← This is the key line
     };
     
-    if (replyingToMessage) {
-      messageData.reply_to_id = replyingToMessage.id;
-      messageData.reply_to_sender = replyingToMessage.sender;
-      messageData.reply_to_text = replyingToMessage.text;
-    }
-    
-    if (!supabaseClient) {
-      if (!initializeSunabase()) {
-        throw new Error('Permanent storage not available');
-      }
-    }
-    
-    const { data, error } = await supabaseClient
+    const { error } = await supabaseClient
       .from('messages')
-      .insert([messageData])
-      .select();
+      .insert([messageData]);
     
-    if (error) {
-      throw new Error(`Failed to save: ${error.message}`);
-    }
+    if (error) throw error;
     
     clearReply();
     await loadMessages();
     showConnectionSuccess('Message sent!');
-    
   } catch (error) {
-    console.error("Failed to send message:", error);
-    showConnectionError(`Failed to send: ${error.message}`);
-    input.value = text;
+    showConnectionError('Failed to send: ' + error.message);
+    console.error(error);
   } finally {
     input.disabled = false;
     input.focus();
