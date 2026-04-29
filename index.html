@@ -1773,6 +1773,33 @@ h1 {
   margin-bottom: 5px;
 }
 
+/* Room delete button styling */
+.delete-room-btn {
+  background: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 0.9em;
+  transition: background 0.2s;
+}
+
+.delete-room-btn:hover {
+  background: #cc0000;
+}
+
+/* Make room cards not clickable on buttons */
+.room-card button {
+  pointer-events: auto;
+}
+
+/* Prevent card click when clicking buttons */
+.room-card *:not(button) {
+  pointer-events: auto;
+}
+
 </style>
 </head>
 
@@ -1829,7 +1856,7 @@ h1 {
     </button>
     
     <!-- Create (mossy circle) -->
-    <button onclick="createRoom()" style="
+    <button onclick="openRoomCreationModal()" style="
       width:28px;
       height:28px;
       border-radius:50%;
@@ -1846,11 +1873,11 @@ h1 {
     </button>
     
     <label style="font-size:11px; opacity:0.6; display:flex; align-items:center; gap:4px;">
-  <input type="checkbox" id="rememberRoom" /> stay
-</label>
+      <input type="checkbox" id="rememberRoom" /> stay
+    </label>
     
-  </div>
-</div>
+    </div>
+    </div>
 
 
 
@@ -2057,13 +2084,37 @@ h1 {
   <div id="setup-error" class="error-message"></div>
 </div>
 
+
+
 <div id="chat-container">
-  <div id="chat-header">
-  <h3 id="chatTitle">Matka Messaging</h3>
-  <div>
-      You: <span id="user-display"></span>
+<div id="chat-header" style="padding: 15px; background: #1e6cff; color: white; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+  
+  <!-- Left: Chat Title -->
+  <h3 id="chatTitle" style="margin: 0; font-size: 1.2em;">Matka Messaging</h3>
+  
+  <!-- Right side: User info + Rooms button -->
+  <div style="display: flex; align-items: center; gap: 12px;">
+    
+    <!-- Rooms Button -->
+    <button id="rooms-dashboard-btn" style="
+      background: rgba(255,255,255,0.25); 
+      color: white; 
+      border: none; 
+      border-radius: 6px; 
+      padding: 6px 12px; 
+      cursor: pointer; 
+      font-size: 12px; 
+      font-weight: bold;">
+      📊 Rooms
+    </button>
+    
+    <!-- User Display -->
+    <div style="font-size: 14px;">
+      You: <span id="user-display" style="font-weight: bold;"></span>
     </div>
   </div>
+  
+</div>
   
   <div id="messages">
     <div class="empty-state" id="empty-state">
@@ -2187,50 +2238,365 @@ function getRoomId() {
 let roomId = getRoomId();
 console.log("Room ID:", roomId);
 
-function createRoom() {
-  const newRoomId = crypto.randomUUID();
-  switchRoom(newRoomId);
+function getCurrentUsername() {
+  return currentUser || document.getElementById('user-display').textContent || '';
 }
 
-function goGlobal() {
-  switchRoom("global");
-}
+// =================== ROOM CREATION FUNCTIONS ===================
 
-function switchRoom(newRoomId) {
-  roomId = newRoomId;
-  const url = new URL(window.location);
-  url.searchParams.set("room", newRoomId);
-  window.history.pushState({}, "", url);
-
-  // Update title
-  const title = document.getElementById("chatTitle");
-  if (title) {
-    title.textContent = roomId === "global" ? "Global" : "Room " + roomId.slice(0, 4);
+async function createRoom() {
+  const roomNameInput = document.getElementById('room-name-input').value.trim();
+  const subtitleInput = document.getElementById('room-subtitle-input').value.trim();
+  const isPublic = document.getElementById('room-public-checkbox').checked;
+  
+  const currentUsername = getCurrentUsername();
+  
+  // Validation
+  if (!roomNameInput || roomNameInput.length !== 6) {
+    alert("Room name must be exactly 6 characters.");
+    return;
   }
-
-  // Clear all filters
-  clearDayFilter();
-  clearDOMFilter();
-  clearDOSFilter();
-  clearDOYFilter();
-  heptad = false;                     // turn off heptad mode
-  document.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
-  document.querySelector('button[data-mode="DOY"]').classList.add("active");
-  hideWeekFilter();
-  hideDOMFilter();
-  hideDOSFilter();
-  hideDOYFilter();
-
-  // Clear messages container
-  const container = document.getElementById("messages");
-  if (container) container.innerHTML = '<div class="empty-state">Loading messages…</div>';
-
-  // Reload messages (with new room)
-  if (currentUser) loadMessages();
-
-  // Save remembered room
-  localStorage.setItem("rememberedRoom", newRoomId);
+  
+  if (!currentUsername || !currentUsername.toLowerCase().endsWith('ji')) {
+    alert("You must have 'Ji' at the end of your username to create a room.\n\nExample: JoeJi");
+    return;
+  }
+  
+  if (subtitleInput.length > 25) {
+    alert("Subtitle cannot be more than 25 characters.");
+    return;
+  }
+  
+  // === CHECK IF ROOM ALREADY EXISTS ===
+  try {
+    // Check for any messages in this room
+    const { data: existingMessages, error: checkError } = await supabaseClient
+      .from('messages')
+      .select('id')
+      .eq('room_name', roomNameInput)
+      .limit(1);
+    
+    if (checkError) throw checkError;
+    
+    if (existingMessages && existingMessages.length > 0) {
+      alert(`Room "${roomNameInput}" already exists!\n\nPlease choose a different room name.`);
+      return;
+    }
+  } catch (error) {
+    console.error("Error checking room existence:", error);
+    alert("Failed to check if room exists. Please try again.");
+    return;
+  }
+  
+  // ASK IF USER WANTS PASSWORD - via popup
+  const wantsPassword = confirm(`Do you want to password-protect room "${roomNameInput}"?\n\nOK = Yes, Cancel = No password.`);
+  
+  let roomPassword = null;
+  if (wantsPassword) {
+    // Ask for password via popup
+    roomPassword = prompt(`Enter 6-character password for room "${roomNameInput}":`);
+    if (!roomPassword) {
+      alert("Room creation cancelled.");
+      return;
+    }
+    
+    if (roomPassword.length !== 6) {
+      alert("Password must be exactly 6 characters.");
+      return;
+    }
+    
+    // Confirm password
+    const confirmPassword = prompt(`Confirm password for room "${roomNameInput}":`);
+    if (roomPassword !== confirmPassword) {
+      alert("Passwords do not match. Room creation cancelled.");
+      return;
+    }
+    
+    // Store password in localStorage immediately
+    localStorage.setItem(`room_password_${roomNameInput}`, roomPassword);
+  }
+  
+  try {
+    // Build room creation announcement
+    let announcementText = `📢 Room "${roomNameInput}" created by ${currentUsername}`;
+    
+    if (subtitleInput) {
+      announcementText += `\nSubtitle: ${subtitleInput}`;
+    }
+    
+    if (roomPassword) {
+      announcementText += `\n🔐 Password: ${roomPassword}`;
+    } else {
+      announcementText += `\n🔓 No password (public room)`;
+    }
+    
+    announcementText += `\nCreated at: ${new Date().toLocaleTimeString()}`;
+    
+    const messageData = {
+      from_user: currentUsername,
+      text: announcementText,
+      timestamp: new Date().toISOString(),
+      room_name: roomNameInput,
+      room_id: null
+    };
+    
+    const { error } = await supabaseClient
+      .from('messages')
+      .insert([messageData]);
+    
+    if (error) throw error;
+    
+    if (roomPassword) {
+      alert(`Room "${roomNameInput}" created with password protection!\n\nPassword: ${roomPassword}\n\nKeep this password safe - it's required to enter the room.`);
+    } else {
+      alert(`Room "${roomNameInput}" created without password.\n\nAnyone can join this room.`);
+    }
+    
+    closeRoomCreationModal();
+    switchRoom(roomNameInput);
+    
+  } catch (error) {
+    console.error(error);
+    alert("Failed to create room: " + error.message);
+  }
 }
+
+
+
+
+
+function openRoomCreationModal() {
+  document.getElementById('room-creation-modal').style.display = 'block';
+  document.getElementById('room-name-input').value = '';
+  document.getElementById('room-subtitle-input').value = '';
+  document.getElementById('room-password-input').value = '';
+  document.getElementById('room-public-checkbox').checked = true;
+}
+
+function closeRoomCreationModal() {
+  document.getElementById('room-creation-modal').style.display = 'none';
+}
+
+// 3. Improved switchRoom + goGlobal
+function goGlobal() {
+  roomId = "global";
+  const titleEl = document.getElementById('chatTitle');
+  if (titleEl) titleEl.textContent = "Global";
+  loadMessages();
+}
+
+async function switchRoom(newRoom) {
+  if (!newRoom || newRoom.trim() === "") {
+    goGlobal();
+    return;
+  }
+  
+  const roomToJoin = newRoom.trim();
+  
+  // Don't check password for global room
+  if (roomToJoin === "global") {
+    roomId = "global";
+    const titleEl = document.getElementById('chatTitle');
+    if (titleEl) {
+      titleEl.textContent = "Global";
+    }
+    loadMessages();
+    return;
+  }
+  
+  // Check if password is already stored in localStorage
+  const storedPassword = localStorage.getItem(`room_password_${roomToJoin}`);
+  
+  if (storedPassword) {
+    // IMPORTANT: Check for null (user pressed Cancel) or empty string (user pressed OK without typing)
+    const enteredPassword = prompt(`Room "${roomToJoin}" is password protected.\n\nEnter password:`);
+    
+    // User pressed Cancel
+    if (enteredPassword === null) {
+      showConnectionError(`Access to room "${roomToJoin}" cancelled`);
+      return;
+    }
+    
+    // User pressed OK without typing anything
+    if (enteredPassword === "") {
+      showConnectionError(`Password required for room "${roomToJoin}"`);
+      return;
+    }
+    
+    // User entered something - check if it's correct
+    if (enteredPassword !== storedPassword) {
+      showConnectionError(`Incorrect password for room "${roomToJoin}"`);
+      return;
+    }
+    
+    // Password correct - proceed
+  } else {
+    // No stored password - check first message in room
+    try {
+      const { data: messages, error } = await supabaseClient
+        .from('messages')
+        .select('text')
+        .eq('room_name', roomToJoin)
+        .order('timestamp', { ascending: true })
+        .limit(1);
+      
+      if (error) throw error;
+      
+      if (messages && messages.length > 0) {
+        const firstMessage = messages[0].text;
+        
+        // Check if first message contains a password
+        if (firstMessage.includes('🔐 Password:')) {
+          // Extract password from message
+          const passwordMatch = firstMessage.match(/🔐 Password: (\w{6})/);
+          if (passwordMatch && passwordMatch[1]) {
+            const roomPassword = passwordMatch[1];
+            
+            // Store it for future use
+            localStorage.setItem(`room_password_${roomToJoin}`, roomPassword);
+            
+            // Ask for password with proper validation
+            const enteredPassword = prompt(`Room "${roomToJoin}" is password protected.\n\nEnter password:`);
+            
+            // User pressed Cancel
+            if (enteredPassword === null) {
+              showConnectionError(`Access to room "${roomToJoin}" cancelled`);
+              return;
+            }
+            
+            // User pressed OK without typing
+            if (enteredPassword === "") {
+              showConnectionError(`Password required for room "${roomToJoin}"`);
+              return;
+            }
+            
+            // Check entered password
+            if (enteredPassword !== roomPassword) {
+              showConnectionError(`Incorrect password for room "${roomToJoin}"`);
+              return;
+            }
+          }
+        } else if (firstMessage.includes('🔓 No password')) {
+          // Room has no password - proceed directly
+          console.log(`Room "${roomToJoin}" has no password (public room)`);
+        } else {
+          // First message doesn't indicate password status
+          console.log(`Room "${roomToJoin}" - password status unknown`);
+        }
+      }
+    } catch (error) {
+      console.error("Error checking room messages:", error);
+      // If we can't check, proceed (might be a new room)
+    }
+  }
+  
+  // Password correct or no password needed
+  roomId = roomToJoin;
+  const titleEl = document.getElementById('chatTitle');
+  if (titleEl) {
+    titleEl.textContent = `Room ${roomId}`;
+  }
+  
+  // Update room label
+  const roomLabel = document.getElementById('roomLabel');
+  if (roomLabel) {
+    roomLabel.textContent = `Room: ${roomId}`;
+  }
+  
+  // Save to remembered room if checkbox is checked
+  const rememberCheckbox = document.getElementById('rememberRoom');
+  if (rememberCheckbox && rememberCheckbox.checked) {
+    localStorage.setItem("rememberedRoom", roomId);
+  }
+  
+  loadMessages();
+  showConnectionSuccess(`Joined room: ${roomId}`);
+}
+
+
+
+
+
+// =================== ROOM DELETION FUNCTIONS ===================
+
+async function deleteRoom(roomName) {
+  const currentUsername = getCurrentUsername();
+  
+  // Validation: Only room owners (users with "Ji" suffix) or admins can delete
+  if (!currentUsername || !currentUsername.toLowerCase().endsWith('ji')) {
+    if (!isAdmin) {
+      alert("Only room owners (users with 'Ji' suffix) or admins can delete rooms.");
+      return false;
+    }
+  }
+  
+  const confirmMessage = isAdmin 
+    ? `Are you sure you want to delete room "${roomName}" as admin? ALL messages in this room will be permanently deleted.`
+    : `Are you sure you want to delete your room "${roomName}"? ALL messages in this room will be permanently deleted.`;
+  
+  if (!confirm(confirmMessage)) {
+    return false;
+  }
+  
+  try {
+    // Delete all messages in the room
+    const { error: deleteError } = await supabaseClient
+      .from('messages')
+      .delete()
+      .eq('room_name', roomName);
+    
+    if (deleteError) throw deleteError;
+    
+    // If we're currently in the deleted room, switch to global
+    if (roomId === roomName) {
+      goGlobal();
+      showConnectionSuccess(`Room "${roomName}" deleted. Switched to Global.`);
+    } else {
+      showConnectionSuccess(`Room "${roomName}" deleted.`);
+    }
+    
+    // Refresh rooms dashboard if it's open
+    if (document.getElementById('room-dashboard').style.display === 'block') {
+      loadRoomsDashboard();
+    }
+    
+    return true;
+    
+  } catch (error) {
+    console.error('Failed to delete room:', error);
+    showConnectionError(`Failed to delete room: ${error.message}`);
+    return false;
+  }
+}
+
+function deleteRoomWithConfirmation(roomName, roomOwner) {
+  const currentUsername = getCurrentUsername();
+  
+  // Check permissions
+  const isOwner = roomOwner === currentUsername;
+  const canDelete = isOwner || isAdmin;
+  
+  if (!canDelete) {
+    if (currentUsername.toLowerCase().endsWith('ji')) {
+      alert(`You cannot delete this room. Only the room owner "${roomOwner}" or an admin can delete it.`);
+    } else {
+      alert("You must be a room owner (user with 'Ji' suffix) or admin to delete rooms.");
+    }
+    return;
+  }
+  
+  const action = isAdmin 
+    ? () => deleteRoom(roomName)
+    : () => deleteRoom(roomName);
+  
+  const title = isAdmin ? 'Delete Room (Admin)' : 'Delete Your Room';
+  const message = isAdmin
+    ? `You are deleting room "${roomName}" as an administrator. All messages in this room will be permanently deleted. This action cannot be undone.`
+    : `You are deleting your room "${roomName}". All messages in this room will be permanently deleted. This action cannot be undone.`;
+  
+  showConfirmation(title, message, action);
+}
+
 
 /* ===============================
    CONFIGURATION
@@ -3728,11 +4094,10 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// Updated loadMessages for simple rooms
 async function loadMessages() {
 try {
-if (!supabaseClient) {
-initializeSunabase();
-}
+if (!supabaseClient) initializeSunabase();
 
 let query = supabaseClient
 .from('messages')
@@ -3742,7 +4107,7 @@ let query = supabaseClient
 if (roomId === "global") {
 query = query.eq('room_name', 'global');
 } else {
-query = query.eq('room_name', roomId); // e.g. "777888"
+query = query.eq('room_name', roomId);
 }
 
 const { data: messages, error } = await query;
@@ -3750,15 +4115,15 @@ const { data: messages, error } = await query;
 if (error) throw error;
 
 currentMessages = messages || [];
-const filteredMessages = filterMessages(currentMessages);
-renderMessages(filteredMessages);
+const filtered = filterMessages(currentMessages);
+renderMessages(filtered);
 
 const countEl = document.getElementById('message-count');
-if (countEl) countEl.textContent = ` • ${filteredMessages.length} messages`;
+if (countEl) countEl.textContent = ` • ${filtered.length} messages`;
 
 } catch (error) {
 console.error(error);
-showConnectionError("Cannot connect to permanent storage: " + error.message);
+showConnectionError("Storage error: " + error.message);
 }
 }
 
@@ -4155,6 +4520,7 @@ setTimeout(() => {
 /* ===============================
    SEND MESSAGE
 =============================== */
+// Updated sendMessage
 async function sendMessage() {
   if (!currentUser) {
     showConnectionError('Please enter your name first');
@@ -4173,9 +4539,15 @@ async function sendMessage() {
       from_user: currentUser,
       text: text,
       timestamp: new Date().toISOString(),
-      room_id: null,
-      room_name: (roomId === "global") ? "global" : roomId // ← This is the key line
+      room_name: (roomId === "global") ? "global" : roomId,
+      room_id: null
     };
+    
+    if (replyingToMessage) {
+      messageData.reply_to_id = replyingToMessage.id;
+      messageData.reply_to_sender = replyingToMessage.sender;
+      messageData.reply_to_text = replyingToMessage.text;
+    }
     
     const { error } = await supabaseClient
       .from('messages')
@@ -4188,12 +4560,436 @@ async function sendMessage() {
     showConnectionSuccess('Message sent!');
   } catch (error) {
     showConnectionError('Failed to send: ' + error.message);
-    console.error(error);
+    input.value = text;
   } finally {
     input.disabled = false;
     input.focus();
   }
 }
+
+// Create a new function to store room metadata
+function storeRoomMetadata(roomName, metadata) {
+    const roomKey = `room_metadata_${roomName}`;
+    const existing = JSON.parse(localStorage.getItem(roomKey) || '{}');
+    
+    const updated = {
+        ...existing,
+        ...metadata,
+        lastUpdated: new Date().toISOString()
+    };
+    
+    localStorage.setItem(roomKey, JSON.stringify(updated));
+    console.log('Stored metadata for', roomName, ':', updated);
+}
+
+// Create a function to get room metadata
+function getRoomMetadata(roomName) {
+    const roomKey = `room_metadata_${roomName}`;
+    const data = localStorage.getItem(roomKey);
+    return data ? JSON.parse(data) : null;
+}
+
+// Update extractRoomMetadata to store data
+function extractRoomMetadata(text, roomName = null) {
+    const metadata = {
+        subtitle: null,
+        passwordProtected: false,
+        passwordValue: null
+    };
+    
+    if (!text) return metadata;
+    
+    // Extract subtitle
+    const subtitleMatch = text.match(/[Ss]ubtitle:\s*(.+)/i);
+    if (subtitleMatch) {
+        metadata.subtitle = subtitleMatch[1].trim();
+    }
+    
+    // Check password status
+    if (text.includes('🔐 Password:')) {
+        metadata.passwordProtected = true;
+        const passwordMatch = text.match(/🔐 Password:\s*(\w{6})/i);
+        if (passwordMatch && passwordMatch[1]) {
+            metadata.passwordValue = passwordMatch[1];
+        }
+    } else if (text.includes('🔓 No password')) {
+        metadata.passwordProtected = false;
+    } else if (text.match(/[Pp]assword:\s*\w{6}/i)) {
+        metadata.passwordProtected = true;
+        const passwordMatch = text.match(/[Pp]assword:\s*(\w{6})/i);
+        if (passwordMatch && passwordMatch[1]) {
+            metadata.passwordValue = passwordMatch[1];
+        }
+    }
+    
+    // Store in localStorage if we have a room name and found metadata
+    if (roomName && (metadata.subtitle || metadata.passwordValue || metadata.passwordProtected === false)) {
+        storeRoomMetadata(roomName, metadata);
+    }
+    
+    return metadata;
+}
+
+
+function extractRoomMetadata(text) {
+    const metadata = {
+        subtitle: null,
+        passwordProtected: false
+    };
+    
+    if (!text) return metadata;
+    
+    // Extract subtitle
+    const subtitleMatch = text.match(/[Ss]ubtitle:\s*(.+)/i);
+    if (subtitleMatch) {
+        metadata.subtitle = subtitleMatch[1].trim();
+    }
+    
+    // Check password status
+    if (text.includes('🔐 Password:')) {
+        metadata.passwordProtected = true;
+    } else if (text.includes('🔓 No password')) {
+        metadata.passwordProtected = false;
+    } else if (text.match(/[Pp]assword:\s*\w{6}/i)) {
+        metadata.passwordProtected = true;
+    }
+    
+    return metadata;
+}
+
+
+// ROOMS DASHBOARD FUNCTIONS
+// =================== ROOMS DASHBOARD FUNCTIONS ===================
+async function loadRoomsDashboard() {
+    try {
+        console.log('=== loadRoomsDashboard CALLED ===');
+        
+        // Get all messages to analyze rooms
+        const { data: messages, error } = await supabaseClient
+            .from('messages')
+            .select('room_name, from_user, timestamp, text')
+            .not('room_name', 'is', null)
+            .order('timestamp', { ascending: false });
+        
+        if (error) throw error;
+        
+        // Group messages by room
+        const rooms = {};
+        const roomMetadata = {}; // Store metadata separately
+        
+        // Process each message
+        messages.forEach(msg => {
+            if (!msg.room_name || msg.room_name === 'global') return;
+            
+            if (!rooms[msg.room_name]) {
+                rooms[msg.room_name] = {
+                    name: msg.room_name,
+                    lastTimestamp: msg.timestamp,
+                    messageCount: 0,
+                    createdBy: msg.from_user,
+                    participants: new Set([msg.from_user])
+                };
+            }
+            
+            const room = rooms[msg.room_name];
+            
+            // Extract and store metadata
+            const metadata = extractRoomMetadata(msg.text, msg.room_name);
+            
+            // Update room stats
+            room.messageCount++;
+            room.participants.add(msg.from_user);
+            if (new Date(msg.timestamp) > new Date(room.lastTimestamp)) {
+                room.lastTimestamp = msg.timestamp;
+            }
+        });
+        
+        // Now create the final room array with metadata from localStorage
+        const roomArray = Object.values(rooms).map(room => {
+            // Get metadata from localStorage
+            const metadata = getRoomMetadata(room.name) || {};
+            
+            return {
+                name: room.name,
+                lastTimestamp: room.lastTimestamp,
+                messageCount: room.messageCount,
+                createdBy: room.createdBy,
+                participants: Array.from(room.participants),
+                subtitle: metadata.subtitle || null,
+                passwordProtected: metadata.passwordProtected || false,
+                passwordValue: metadata.passwordValue || null
+            };
+        });
+        
+        // Sort by last activity
+        roomArray.sort((a, b) => new Date(b.lastTimestamp) - new Date(a.lastTimestamp));
+        
+        // DEBUG: Log final room data
+        console.log('=== FINAL ROOM DATA ===');
+        roomArray.forEach(room => {
+            console.log(`  ${room.name}:`, {
+                subtitle: room.subtitle,
+                passwordProtected: room.passwordProtected,
+                passwordValue: room.passwordValue,
+                messageCount: room.messageCount
+            });
+        });
+        
+        // Separate my rooms
+        const myRooms = roomArray.filter(room => 
+            room.createdBy === currentUser || 
+            room.participants.includes(currentUser)
+        );
+        
+        const publicRooms = roomArray.filter(room => 
+            !myRooms.some(myRoom => myRoom.name === room.name)
+        );
+        
+        // Render dashboard
+        renderRoomsDashboard(myRooms, publicRooms);
+        
+    } catch (error) {
+        console.error('Failed to load rooms:', error);
+        showConnectionError('Could not load rooms dashboard');
+    }
+}
+
+
+
+
+function renderRoomsDashboard(myRooms, publicRooms) {
+  const myRoomsList = document.getElementById('my-rooms-list');
+  const publicRoomsList = document.getElementById('public-rooms-list');
+  const noRoomsMessage = document.getElementById('no-rooms-message');
+  
+  // Clear existing content
+  myRoomsList.innerHTML = '';
+  publicRoomsList.innerHTML = '';
+  
+  // Helper function to create room card
+  const createRoomCard = (room, isMyRoom) => {
+    const card = document.createElement('div');
+    card.className = 'room-card';
+    card.style.cssText = `
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    `;
+    
+    // Hover effects
+    card.onmouseenter = () => {
+      card.style.background = '#f8f9ff';
+      card.style.borderColor = '#1e6cff';
+      card.style.transform = 'translateY(-2px)';
+      card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+    };
+    
+    card.onmouseleave = () => {
+      card.style.background = 'white';
+      card.style.borderColor = '#e0e0e0';
+      card.style.transform = 'translateY(0)';
+      card.style.boxShadow = 'none';
+    };
+    
+    // Click to enter room
+    card.onclick = (e) => {
+      // Don't switch if clicking delete button
+      if (e.target.closest('.delete-room-btn')) {
+        return;
+      }
+      switchRoom(room.name);
+      hideRoomsDashboard();
+      showConnectionSuccess(`Switched to room: ${room.name}`);
+    };
+    
+    // Format last activity time
+    const timeAgo = formatTimeAgo(room.lastTimestamp);
+    
+    // Format subtitle
+    const subtitleDisplay = room.subtitle ? 
+      (room.subtitle.length > 35 ? 
+        room.subtitle.substring(0, 35) + '...' : 
+        room.subtitle) : 
+      'No description';
+    
+    // Check if current user can delete this room
+    const canDeleteRoom = isAdmin || room.createdBy === getCurrentUsername();
+    
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div style="flex: 1;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+            <strong style="color: #1e6cff; font-size: 1.1em;">${room.name}</strong>
+            ${room.createdBy === getCurrentUsername() ? 
+              '<span style="background: #4CAF50; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: bold;">Owner</span>' : 
+              ''}
+            ${room.passwordProtected ? 
+              '<span style="background: #ff9800; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: bold;">🔒 Locked</span>' : 
+              ''}
+          </div>
+          
+          <div style="color: #666; font-size: 0.85em; margin-bottom: 10px; font-style: italic; min-height: 20px;">
+            📝 ${subtitleDisplay}
+          </div>
+          
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8em; color: #666; background: #f8f9ff; padding: 6px 10px; border-radius: 4px;">
+            <div>
+              <span style="margin-right: 12px;">👥 ${room.participants.size}</span>
+              <span>💬 ${room.messageCount}</span>
+              <span style="margin-left: 12px; font-size: 0.75em; color: #888;">by ${room.createdBy}</span>
+            </div>
+            <div style="color: #888;" title="${new Date(room.lastTimestamp).toLocaleString()}">
+              ${timeAgo}
+            </div>
+          </div>
+        </div>
+        
+        <div style="margin-left: 15px; display: flex; flex-direction: column; gap: 8px;">
+          <button class="enter-room-btn" 
+                  style="
+                    background: #1e6cff;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 8px 16px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    font-size: 0.9em;
+                    white-space: nowrap;
+                    transition: background 0.2s;
+                    min-width: 80px;
+                  ">
+            Enter
+          </button>
+          
+          ${canDeleteRoom ? `
+            <button class="delete-room-btn" 
+                    style="
+                      background: #ff4444;
+                      color: white;
+                      border: none;
+                      border-radius: 6px;
+                      padding: 8px 16px;
+                      cursor: pointer;
+                      font-weight: bold;
+                      font-size: 0.9em;
+                      white-space: nowrap;
+                      transition: background 0.2s;
+                      min-width: 80px;
+                    ">
+              🗑️ Delete
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `;
+    
+    // Enter room button
+    const enterBtn = card.querySelector('.enter-room-btn');
+    if (enterBtn) {
+      enterBtn.onclick = (e) => {
+        e.stopPropagation();
+        switchRoom(room.name);
+        hideRoomsDashboard();
+      };
+      enterBtn.onmouseenter = () => enterBtn.style.background = '#0a5ae0';
+      enterBtn.onmouseleave = () => enterBtn.style.background = '#1e6cff';
+    }
+    
+    // Delete room button (if present)
+    const deleteBtn = card.querySelector('.delete-room-btn');
+    if (deleteBtn) {
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteRoomWithConfirmation(room.name, room.createdBy);
+      };
+      deleteBtn.onmouseenter = () => deleteBtn.style.background = '#cc0000';
+      deleteBtn.onmouseleave = () => deleteBtn.style.background = '#ff4444';
+    }
+    
+    return card;
+  };
+  
+  // Render my rooms
+  if (myRooms.length > 0) {
+    myRooms.forEach(room => {
+      myRoomsList.appendChild(createRoomCard(room, true));
+    });
+  } else {
+    myRoomsList.innerHTML = '<div style="text-align:center; padding:30px; color:#888; font-style:italic; background: #f8f9ff; border-radius: 8px;">You haven\'t joined or created any rooms yet.</div>';
+  }
+  
+  // Render public rooms
+  if (publicRooms.length > 0) {
+    publicRooms.forEach(room => {
+      publicRoomsList.appendChild(createRoomCard(room, false));
+    });
+  } else {
+    publicRoomsList.innerHTML = '<div style="text-align:center; padding:30px; color:#888; font-style:italic; background: #f8f9ff; border-radius: 8px;">No public rooms available.</div>';
+  }
+  
+  // Show/hide "no rooms" message
+  if (myRooms.length === 0 && publicRooms.length === 0) {
+    noRoomsMessage.style.display = 'block';
+  } else {
+    noRoomsMessage.style.display = 'none';
+  }
+}
+
+
+function formatTimeAgo(timestamp) {
+    const now = new Date();
+    const messageTime = new Date(timestamp);
+    const diffMs = now - messageTime;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return `${Math.floor(diffDays / 7)}w ago`;
+}
+
+function showRoomsDashboard() {
+    const dashboard = document.getElementById('room-dashboard');
+    const chatContainer = document.getElementById('chat-container');
+    
+    // Hide chat, show dashboard
+    if (chatContainer) chatContainer.style.display = 'none';
+    if (dashboard) {
+        dashboard.style.display = 'block';
+        loadRoomsDashboard();
+    }
+}
+
+function hideRoomsDashboard() {
+    const dashboard = document.getElementById('room-dashboard');
+    const chatContainer = document.getElementById('chat-container');
+    
+    // Hide dashboard, show chat
+    if (dashboard) dashboard.style.display = 'none';
+    if (chatContainer) chatContainer.style.display = 'block';
+}
+
+// Add event listener for Rooms button (add to existing DOMContentLoaded section ~line 2400)
+document.getElementById('rooms-dashboard-btn').addEventListener('click', showRoomsDashboard);
+
+// Add event listener for Refresh button
+document.getElementById('refresh-rooms-btn')?.addEventListener('click', loadRoomsDashboard);
+
+// Close dashboard when clicking outside (optional)
+document.getElementById('room-dashboard')?.addEventListener('click', (e) => {
+    if (e.target.id === 'room-dashboard') {
+        hideRoomsDashboard();
+    }
+});
 
 
 /* ===============================
@@ -4593,6 +5389,27 @@ if (rememberedUsername) {
     }, 500);
   });
   
+  // Room Creation Modal Buttons
+const confirmCreateBtn = document.getElementById('confirm-create-room');
+const cancelCreateBtn = document.getElementById('cancel-create-room');
+
+if (confirmCreateBtn) {
+  confirmCreateBtn.addEventListener('click', createRoom);
+}
+if (cancelCreateBtn) {
+  cancelCreateBtn.addEventListener('click', closeRoomCreationModal);
+}
+
+// Close modal when clicking outside
+const roomModal = document.getElementById('room-creation-modal');
+if (roomModal) {
+  roomModal.addEventListener('click', (e) => {
+    if (e.target.id === 'room-creation-modal') {
+      closeRoomCreationModal();
+    }
+  });
+}
+  
   // Logout by clicking username
 document.getElementById('user-display').addEventListener('click', function() {
   if (!currentUser) return;
@@ -4663,6 +5480,74 @@ window.addEventListener("beforeunload", () => {
   if (messageInterval) clearInterval(messageInterval);
 });
 </script>
+
+<!-- Room Creation Modal - UPDATED (no password field) -->
+<div id="room-creation-modal" class="edit-overlay" style="display:none;">
+  <div class="edit-overlay-content">
+    <h4>Create New Room</h4>
+    
+    <div style="margin: 15px 0; padding: 10px; background: #fff4e6; border-radius: 6px; border: 1px solid #ffcc80;">
+      <strong>Note:</strong> Your username must end with "Ji" to create rooms.
+    </div>
+    
+    <div class="form-group" style="margin-bottom:15px;">
+      <label>Room Name (exactly 6 characters):</label>
+      <input type="text" id="room-name-input" maxlength="6" 
+             placeholder="chucks" style="width:100%; padding:10px; margin-top:5px;">
+    </div>
+    
+    <div class="form-group" style="margin-bottom:15px;">
+      <label>Subtitle (max 25 characters, will appear in room list):</label>
+      <input type="text" id="room-subtitle-input" maxlength="25" 
+             placeholder="me and my concrete crew" style="width:100%; padding:10px; margin-top:5px;">
+    </div>
+    
+    <!-- REMOVED THE PASSWORD INPUT SECTION -->
+    
+    <div style="margin:15px 0; padding:10px; background:#f0f5ff; border-radius:4px;">
+      <label style="display:flex; align-items:center; gap:8px; font-size:0.95em;">
+        <input type="checkbox" id="room-public-checkbox" checked>
+        <strong>Make this room public</strong> (visible to everyone in room list)
+      </label>
+      <div style="font-size:0.85em; color:#666; margin-top:5px;">
+        Uncheck to make this room private (only people with the room name can join)
+      </div>
+    </div>
+    
+    <div class="edit-overlay-buttons">
+      <button id="cancel-create-room" class="edit-overlay-cancel">Cancel</button>
+      <button id="confirm-create-room" class="edit-overlay-save">Create Room</button>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- Rooms Dashboard -->
+<div id="room-dashboard" style="
+  max-width: 600px;
+  margin: 20px auto;
+  background: white;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  display: none;">
+  
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <h3 style="margin:0; color:#1e6cff;">Available Rooms</h3>
+    <button id="refresh-rooms-btn" style="padding:6px 12px; background:#1e6cff; color:white; border:none; border-radius:4px; cursor:pointer;">🔄 Refresh</button>
+  </div>
+  
+  <h4 style="color:#666; margin:20px 0 10px;">⭐ My Rooms</h4>
+  <div id="my-rooms-list" style="margin-bottom:30px;"></div>
+  
+  <h4 style="color:#666; margin:20px 0 10px;">🌐 Public Rooms</h4>
+  <div id="public-rooms-list"></div>
+  
+  <div id="no-rooms-message" style="text-align:center; padding:30px; color:#888; display:none;">
+    No rooms available yet.
+  </div>
+</div>
 
 <!-- AI Breakdown Modal -->
 <div id="breakdown-modal" class="edit-overlay" style="display:none;">
