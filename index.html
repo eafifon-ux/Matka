@@ -4590,7 +4590,8 @@ function getRoomMetadata(roomName) {
 }
 
 // Update extractRoomMetadata to store data
-function extractRoomMetadata(text, roomName = null) {
+// =================== ROOM METADATA EXTRACTION ===================
+function extractRoomMetadata(text) {
     const metadata = {
         subtitle: null,
         passwordProtected: false,
@@ -4622,40 +4623,141 @@ function extractRoomMetadata(text, roomName = null) {
         }
     }
     
-    // Store in localStorage if we have a room name and found metadata
-    if (roomName && (metadata.subtitle || metadata.passwordValue || metadata.passwordProtected === false)) {
-        storeRoomMetadata(roomName, metadata);
-    }
-    
     return metadata;
 }
 
-
-function extractRoomMetadata(text) {
-    const metadata = {
-        subtitle: null,
-        passwordProtected: false
-    };
-    
-    if (!text) return metadata;
-    
-    // Extract subtitle
-    const subtitleMatch = text.match(/[Ss]ubtitle:\s*(.+)/i);
-    if (subtitleMatch) {
-        metadata.subtitle = subtitleMatch[1].trim();
+// =================== ROOMS DASHBOARD FUNCTIONS ===================
+async function loadRoomsDashboard() {
+    try {
+        console.log('=== loadRoomsDashboard CALLED ===');
+        
+        // Get all messages to analyze rooms
+        const { data: messages, error } = await supabaseClient
+            .from('messages')
+            .select('room_name, from_user, timestamp, text')
+            .not('room_name', 'is', null)
+            .order('timestamp', { ascending: true }); // OLDEST FIRST to get creation message
+        
+        if (error) throw error;
+        
+        console.log('Total messages found:', messages?.length);
+        
+        // Group messages by room - PROCESS IN ORDER
+        const rooms = {};
+        
+        // First pass: Find room creation messages (OLDEST messages for each room)
+        messages.forEach(msg => {
+            if (!msg.room_name || msg.room_name === 'global') return;
+            
+            // If we haven't seen this room yet, process its metadata
+            if (!rooms[msg.room_name]) {
+                console.log('First message for room:', msg.room_name, '- extracting metadata');
+                const metadata = extractRoomMetadata(msg.text);
+                
+                rooms[msg.room_name] = {
+                    name: msg.room_name,
+                    lastTimestamp: msg.timestamp,
+                    messageCount: 1,
+                    createdBy: msg.from_user,
+                    participants: new Set([msg.from_user]),
+                    subtitle: metadata.subtitle,
+                    passwordProtected: metadata.passwordProtected,
+                    passwordValue: metadata.passwordValue,
+                    metadataFound: true // Track that we've extracted metadata
+                };
+                
+                console.log('Extracted metadata for', msg.room_name, ':', {
+                    subtitle: metadata.subtitle,
+                    passwordProtected: metadata.passwordProtected,
+                    passwordValue: metadata.passwordValue
+                });
+            } else {
+                // Update existing room stats
+                const room = rooms[msg.room_name];
+                room.messageCount++;
+                room.participants.add(msg.from_user);
+                room.lastTimestamp = msg.timestamp; // Update to most recent
+            }
+        });
+        
+        // Second pass: If any room didn't get metadata from first message, check all messages
+        Object.values(rooms).forEach(room => {
+            if (!room.metadataFound) {
+                console.log('Room', room.name, 'has no metadata yet, checking all messages');
+                
+                // Find all messages for this room
+                const roomMessages = messages.filter(msg => msg.room_name === room.name);
+                
+                // Check each message for metadata
+                for (const msg of roomMessages) {
+                    const metadata = extractRoomMetadata(msg.text);
+                    
+                    if (metadata.subtitle && !room.subtitle) {
+                        room.subtitle = metadata.subtitle;
+                    }
+                    
+                    if (metadata.passwordValue && !room.passwordValue) {
+                        room.passwordProtected = true;
+                        room.passwordValue = metadata.passwordValue;
+                        room.metadataFound = true;
+                        break;
+                    } else if (metadata.passwordProtected === false && !room.passwordProtected) {
+                        room.passwordProtected = false;
+                        room.metadataFound = true;
+                        break;
+                    }
+                }
+            }
+        });
+        
+        // Convert to array
+        const roomArray = Object.values(rooms).map(room => ({
+            name: room.name,
+            lastTimestamp: room.lastTimestamp,
+            messageCount: room.messageCount,
+            createdBy: room.createdBy,
+            participants: Array.from(room.participants),
+            subtitle: room.subtitle,
+            passwordProtected: room.passwordProtected || false, // Ensure boolean
+            passwordValue: room.passwordValue
+        }));
+        
+        // Sort by last activity
+        roomArray.sort((a, b) => new Date(b.lastTimestamp) - new Date(a.lastTimestamp));
+        
+        // DEBUG: Log final room data
+        console.log('=== FINAL ROOM DATA (', roomArray.length, 'rooms) ===');
+        roomArray.forEach(room => {
+            console.log(`  ${room.name}:`, {
+                subtitle: room.subtitle,
+                passwordProtected: room.passwordProtected,
+                passwordValue: room.passwordValue,
+                messageCount: room.messageCount,
+                participants: room.participants.length
+            });
+        });
+        
+        // Separate my rooms
+        const myRooms = roomArray.filter(room => 
+            room.createdBy === currentUser || 
+            room.participants.includes(currentUser)
+        );
+        
+        const publicRooms = roomArray.filter(room => 
+            !myRooms.some(myRoom => myRoom.name === room.name)
+        );
+        
+        console.log('My rooms:', myRooms.length, 'Public rooms:', publicRooms.length);
+        
+        // Render dashboard
+        renderRoomsDashboard(myRooms, publicRooms);
+        
+    } catch (error) {
+        console.error('Failed to load rooms:', error);
+        showConnectionError('Could not load rooms dashboard');
     }
-    
-    // Check password status
-    if (text.includes('🔐 Password:')) {
-        metadata.passwordProtected = true;
-    } else if (text.includes('🔓 No password')) {
-        metadata.passwordProtected = false;
-    } else if (text.match(/[Pp]assword:\s*\w{6}/i)) {
-        metadata.passwordProtected = true;
-    }
-    
-    return metadata;
 }
+
 
 
 // ROOMS DASHBOARD FUNCTIONS
