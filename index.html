@@ -4391,6 +4391,26 @@ function renderMessages(messages) {
     
     let messageHTML = '';
     
+    // Add this click handler to jump to replied message
+if (replyToId && replyToSender && replyToText) {
+  div.style.cursor = 'pointer';
+  div.style.position = 'relative';
+  
+  div.addEventListener('click', (e) => {
+    // Don't trigger if clicking on action buttons
+    if (e.target.closest('.message-actions')) return;
+    
+    // Find message by the sender we replied to
+    findMessageBySender(replyToSender);
+  });
+}
+
+// Add tooltip for visual feedback
+if (replyToId) {
+  div.title = `Click to jump to ${replyToSender}'s message`;
+}
+
+    
     if (replyToId && replyToSender && replyToText) {
       messageHTML += `
         <div class="reply-indicator">
@@ -4400,6 +4420,28 @@ function renderMessages(messages) {
       `;
     }
     
+    function findMessageBySender(senderName) {
+  // Find all messages by this sender
+  const messages = document.querySelectorAll('.message');
+  
+  for (let msg of messages) {
+    const senderElement = msg.querySelector('.meta .sender');
+    if (senderElement && senderElement.textContent === senderName) {
+      // Scroll to it
+      msg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      
+      // Highlight briefly
+      msg.style.background = '#fff8e6';
+      setTimeout(() => msg.style.background = '', 2000);
+      
+      showConnectionSuccess(`Jumped to ${senderName}'s message`);
+      return;
+    }
+  }
+  
+  showConnectionError('Message not found in current view');
+}
+
     // Convert markdown to HTML, then sanitize
 const mdHtml = DOMPurify.sanitize(marked.parse(textField || ''));
 messageHTML += `
