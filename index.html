@@ -4840,7 +4840,7 @@ async function loadRoomsDashboard() {
               '<span style="background: #4CAF50; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: bold;">Owner</span>' : 
               ''}
             ${room.passwordProtected ? 
-              '<span style="background: #ff9800; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: bold;">Locked</span>' : 
+              '<span style="background: #ff9800; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: bold;"> Locked</span>' : 
               ''}
           </div>
           
@@ -4850,7 +4850,7 @@ async function loadRoomsDashboard() {
           
           <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8em; color: #666; background: #f8f9ff; padding: 6px 10px; border-radius: 4px;">
             <div>
-              <span style="margin-right: 12px;">👥 ${room.participants.size}</span>
+              <span style="margin-right: 12px;">👥 ${room.participants.length}</span>
               <span>💬 ${room.messageCount}</span>
               <span style="margin-left: 12px; font-size: 0.75em; color: #888;">by ${room.createdBy}</span>
             </div>
