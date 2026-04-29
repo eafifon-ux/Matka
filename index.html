@@ -1800,6 +1800,32 @@ h1 {
   pointer-events: auto;
 }
 
+/* Light purple delete button */
+.delete-room-btn {
+  position: absolute !important;
+  bottom: 10px;
+  right: 10px;
+  padding: 4px 8px !important;
+  font-size: 10px !important;
+  border-radius: 12px !important;
+  background: #d8b2ff !important; /* Light purple */
+  color: #4a2c6b !important; /* Dark purple text for contrast */
+  border: none !important;
+  cursor: pointer !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15) !important;
+  transition: all 0.2s !important;
+  z-index: 10;
+  min-width: auto !important;
+  white-space: nowrap;
+  font-weight: bold !important;
+}
+
+.delete-room-btn:hover {
+  background: #c191ff !important; /* Slightly darker light purple */
+  transform: scale(1.05) !important;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.25) !important;
+}
+
 </style>
 </head>
 
