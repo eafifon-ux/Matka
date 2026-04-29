@@ -4755,22 +4755,30 @@ async function loadRoomsDashboard() {
 }
 
 
-
-
-function renderRoomsDashboard(myRooms, publicRooms) {
-  const myRoomsList = document.getElementById('my-rooms-list');
-  const publicRoomsList = document.getElementById('public-rooms-list');
-  const noRoomsMessage = document.getElementById('no-rooms-message');
-  
-  // Clear existing content
-  myRoomsList.innerHTML = '';
-  publicRoomsList.innerHTML = '';
-  
-  // Helper function to create room card
-  const createRoomCard = (room, isMyRoom) => {
-    const card = document.createElement('div');
-    card.className = 'room-card';
-    card.style.cssText = `
+  // Update the renderRoomsDashboard function to replace LAST letter with lock
+  function renderRoomsDashboard(myRooms, publicRooms) {
+    const myRoomsList = document.getElementById('my-rooms-list');
+    const publicRoomsList = document.getElementById('public-rooms-list');
+    const noRoomsMessage = document.getElementById('no-rooms-message');
+    
+    // Clear existing content
+    myRoomsList.innerHTML = '';
+    publicRoomsList.innerHTML = '';
+    
+    // Helper function to format room name with lock at the END
+    const formatRoomName = (room) => {
+      if (room.passwordProtected && room.name && room.name.length > 0) {
+        // Replace last character with 🔒
+        return `<span class="room-name-with-lock">${room.name.substring(0, room.name.length - 1)}<span class="lock-replacement">🔒</span></span>`;
+      }
+      return room.name;
+    };
+    
+    // Helper function to create room card
+    const createRoomCard = (room, isMyRoom) => {
+      const card = document.createElement('div');
+      card.className = 'room-card';
+      card.style.cssText = `
       background: white;
       border: 1px solid #e0e0e0;
       border-radius: 8px;
@@ -4780,51 +4788,54 @@ function renderRoomsDashboard(myRooms, publicRooms) {
       transition: all 0.2s;
       position: relative;
     `;
-    
-    // Hover effects
-    card.onmouseenter = () => {
-      card.style.background = '#f8f9ff';
-      card.style.borderColor = '#1e6cff';
-      card.style.transform = 'translateY(-2px)';
-      card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-    };
-    
-    card.onmouseleave = () => {
-      card.style.background = 'white';
-      card.style.borderColor = '#e0e0e0';
-      card.style.transform = 'translateY(0)';
-      card.style.boxShadow = 'none';
-    };
-    
-    // Click to enter room
-    card.onclick = (e) => {
-      // Don't switch if clicking delete button
-      if (e.target.closest('.delete-room-btn')) {
-        return;
-      }
-      switchRoom(room.name);
-      hideRoomsDashboard();
-      showConnectionSuccess(`Switched to room: ${room.name}`);
-    };
-    
-    // Format last activity time
-    const timeAgo = formatTimeAgo(room.lastTimestamp);
-    
-    // Format subtitle
-    const subtitleDisplay = room.subtitle ? 
-      (room.subtitle.length > 35 ? 
-        room.subtitle.substring(0, 35) + '...' : 
-        room.subtitle) : 
-      'No description';
-    
-    // Check if current user can delete this room
-    const canDeleteRoom = isAdmin || room.createdBy === getCurrentUsername();
-    
-    card.innerHTML = `
+      
+      // Hover effects
+      card.onmouseenter = () => {
+        card.style.background = '#f8f9ff';
+        card.style.borderColor = '#1e6cff';
+        card.style.transform = 'translateY(-2px)';
+        card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+      };
+      
+      card.onmouseleave = () => {
+        card.style.background = 'white';
+        card.style.borderColor = '#e0e0e0';
+        card.style.transform = 'translateY(0)';
+        card.style.boxShadow = 'none';
+      };
+      
+      // Click to enter room
+      card.onclick = (e) => {
+        // Don't switch if clicking delete button
+        if (e.target.closest('.delete-room-btn')) {
+          return;
+        }
+        switchRoom(room.name);
+        hideRoomsDashboard();
+        showConnectionSuccess(`Switched to room: ${room.name}`);
+      };
+      
+      // Format last activity time
+      const timeAgo = formatTimeAgo(room.lastTimestamp);
+      
+      // Format subtitle
+      const subtitleDisplay = room.subtitle ?
+        (room.subtitle.length > 35 ?
+          room.subtitle.substring(0, 35) + '...' :
+          room.subtitle) :
+        'No description';
+      
+      // Check if current user can delete this room
+      const canDeleteRoom = isAdmin || room.createdBy === getCurrentUsername();
+      
+      // Format room name with lock at the end if password protected
+      const displayedName = formatRoomName(room);
+      
+      card.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div style="flex: 1;">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
-            <strong style="color: #1e6cff; font-size: 1.1em;">${room.name}</strong>
+            <strong style="color: #1e6cff; font-size: 1.1em;">${displayedName}</strong>
             ${room.createdBy === getCurrentUsername() ? 
               '<span style="background: #4CAF50; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: bold;">Owner</span>' : 
               ''}
@@ -4888,57 +4899,98 @@ function renderRoomsDashboard(myRooms, publicRooms) {
         </div>
       </div>
     `;
+      
+      // Enter room button
+      const enterBtn = card.querySelector('.enter-room-btn');
+      if (enterBtn) {
+        enterBtn.onclick = (e) => {
+          e.stopPropagation();
+          switchRoom(room.name);
+          hideRoomsDashboard();
+        };
+        enterBtn.onmouseenter = () => enterBtn.style.background = '#0a5ae0';
+        enterBtn.onmouseleave = () => enterBtn.style.background = '#1e6cff';
+      }
+      
+      // Delete room button (if present)
+      const deleteBtn = card.querySelector('.delete-room-btn');
+      if (deleteBtn) {
+        deleteBtn.onclick = (e) => {
+          e.stopPropagation();
+          deleteRoomWithConfirmation(room.name, room.createdBy);
+        };
+        deleteBtn.onmouseenter = () => deleteBtn.style.background = '#cc0000';
+        deleteBtn.onmouseleave = () => deleteBtn.style.background = '#ff4444';
+      }
+      
+      return card;
+    };
     
-    // Enter room button
-    const enterBtn = card.querySelector('.enter-room-btn');
-    if (enterBtn) {
-      enterBtn.onclick = (e) => {
-        e.stopPropagation();
-        switchRoom(room.name);
-        hideRoomsDashboard();
-      };
-      enterBtn.onmouseenter = () => enterBtn.style.background = '#0a5ae0';
-      enterBtn.onmouseleave = () => enterBtn.style.background = '#1e6cff';
+    // Render my rooms
+    if (myRooms.length > 0) {
+      myRooms.forEach(room => {
+        myRoomsList.appendChild(createRoomCard(room, true));
+      });
+    } else {
+      myRoomsList.innerHTML = '<div style="text-align:center; padding:30px; color:#888; font-style:italic; background: #f8f9ff; border-radius: 8px;">You haven\'t joined or created any rooms yet.</div>';
     }
     
-    // Delete room button (if present)
-    const deleteBtn = card.querySelector('.delete-room-btn');
-    if (deleteBtn) {
-      deleteBtn.onclick = (e) => {
-        e.stopPropagation();
-        deleteRoomWithConfirmation(room.name, room.createdBy);
-      };
-      deleteBtn.onmouseenter = () => deleteBtn.style.background = '#cc0000';
-      deleteBtn.onmouseleave = () => deleteBtn.style.background = '#ff4444';
+    // Render public rooms
+    if (publicRooms.length > 0) {
+      publicRooms.forEach(room => {
+        publicRoomsList.appendChild(createRoomCard(room, false));
+      });
+    } else {
+      publicRoomsList.innerHTML = '<div style="text-align:center; padding:30px; color:#888; font-style:italic; background: #f8f9ff; border-radius: 8px;">No public rooms available.</div>';
     }
     
-    return card;
+    // Show/hide "no rooms" message
+    if (myRooms.length === 0 && publicRooms.length === 0) {
+      noRoomsMessage.style.display = 'block';
+    } else {
+      noRoomsMessage.style.display = 'none';
+    }
+  }
+
+// Keep the extractRoomMetadata function as is (no changes needed)
+function extractRoomMetadata(text, roomName = null) {
+  const metadata = {
+    subtitle: null,
+    passwordProtected: false,
+    passwordValue: null
   };
   
-  // Render my rooms
-  if (myRooms.length > 0) {
-    myRooms.forEach(room => {
-      myRoomsList.appendChild(createRoomCard(room, true));
-    });
-  } else {
-    myRoomsList.innerHTML = '<div style="text-align:center; padding:30px; color:#888; font-style:italic; background: #f8f9ff; border-radius: 8px;">You haven\'t joined or created any rooms yet.</div>';
+  if (!text) return metadata;
+  
+  // Extract subtitle
+  const subtitleMatch = text.match(/[Ss]ubtitle:\s*(.+)/i);
+  if (subtitleMatch) {
+    metadata.subtitle = subtitleMatch[1].trim();
   }
   
-  // Render public rooms
-  if (publicRooms.length > 0) {
-    publicRooms.forEach(room => {
-      publicRoomsList.appendChild(createRoomCard(room, false));
-    });
-  } else {
-    publicRoomsList.innerHTML = '<div style="text-align:center; padding:30px; color:#888; font-style:italic; background: #f8f9ff; border-radius: 8px;">No public rooms available.</div>';
+  // Check password status
+  if (text.includes('🔐 Password:')) {
+    metadata.passwordProtected = true;
+    const passwordMatch = text.match(/🔐 Password:\s*(\w{6})/i);
+    if (passwordMatch && passwordMatch[1]) {
+      metadata.passwordValue = passwordMatch[1];
+    }
+  } else if (text.includes('🔓 No password')) {
+    metadata.passwordProtected = false;
+  } else if (text.match(/[Pp]assword:\s*\w{6}/i)) {
+    metadata.passwordProtected = true;
+    const passwordMatch = text.match(/[Pp]assword:\s*(\w{6})/i);
+    if (passwordMatch && passwordMatch[1]) {
+      metadata.passwordValue = passwordMatch[1];
+    }
   }
   
-  // Show/hide "no rooms" message
-  if (myRooms.length === 0 && publicRooms.length === 0) {
-    noRoomsMessage.style.display = 'block';
-  } else {
-    noRoomsMessage.style.display = 'none';
+  // Store in localStorage if we have a room name and found metadata
+  if (roomName && (metadata.subtitle || metadata.passwordValue || metadata.passwordProtected === false)) {
+    storeRoomMetadata(roomName, metadata);
   }
+  
+  return metadata;
 }
 
 
