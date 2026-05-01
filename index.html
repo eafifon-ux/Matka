@@ -2269,7 +2269,7 @@ function getCurrentUsername() {
 }
 
 /* ===============================
-   @NOW - OFFSET HOUR (-6) WITH ORIGINAL PHONETIC
+   @NOW - OFFSET HOUR (-6) DISPLAY, ORIGINAL TIME FOR PHONETIC
 =============================== */
 function getNowTime() {
     const now = new Date();
@@ -2279,14 +2279,25 @@ function getNowTime() {
     // Calculate offset hour (-6 hours for your timezone)
     let offsetH = (originalH - 6 + 24) % 24;
     
-    // Phonetic based on ORIGINAL time (not offset)
-    let phonetic;
-    if (originalH >= 7 && originalH <= 12) phonetic = 'Mike';      // 7am-12pm
-    else if (originalH >= 13 && originalH <= 18) phonetic = 'Alpha'; // 1pm-6pm
-    else if (originalH >= 19 || originalH === 0) phonetic = 'Echo';   // 7pm-12am
-    else phonetic = 'Napa';                                         // 1am-6am
+    // Phonetic based on ORIGINAL local time (Western periods):
+    // Morning: 6am-12pm (06:00-11:59) - Mike
+    // Afternoon: 12pm-6pm (12:00-17:59) - Alpha  
+    // Evening: 6pm-midnight (18:00-23:59) - Echo
+    // Night: midnight-6am (00:00-05:59) - Napa
     
-    // Show OFFSET hour with ORIGINAL phonetic: "10:36 Alpha"
+    let phonetic;
+    if (originalH >= 6 && originalH < 12) {
+        phonetic = 'Mike';       // Morning: 6am-12pm LOCAL
+    } else if (originalH >= 12 && originalH < 18) {
+        phonetic = 'Alpha';      // Afternoon: 12pm-6pm LOCAL
+    } else if (originalH >= 18 && originalH < 24) {
+        phonetic = 'Echo';       // Evening: 6pm-midnight LOCAL
+    } else {
+        phonetic = 'Napa';       // Night: midnight-6am LOCAL
+    }
+    
+    // Show OFFSET hour with ORIGINAL LOCAL phonetic:
+    // Example: Original time 18:44 (6:44pm) → Offset 12:44 → "12:44 Echo"
     return `${offsetH.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')} ${phonetic}`;
 }
 
