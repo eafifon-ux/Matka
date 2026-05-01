@@ -2268,34 +2268,6 @@ function getCurrentUsername() {
   return currentUser || document.getElementById('user-display').textContent || '';
 }
 
-/* ===============================
-   @NOW - OFFSET HOUR (-6) WITH ORIGINAL PHONETIC
-=============================== */
-function getNowTime() {
-    const now = new Date();
-    const originalH = now.getHours();  // Current local hour (0-23)
-    const m = now.getMinutes();
-    
-    // Calculate offset hour (-6 hours for your timezone)
-    let offsetH = (originalH - 6 + 24) % 24;
-    
-    // Phonetic based on ORIGINAL time (not offset)
-    let phonetic;
-    if (originalH >= 7 && originalH <= 12) phonetic = 'Mike';      // 7am-12pm
-    else if (originalH >= 13 && originalH <= 18) phonetic = 'Alpha'; // 1pm-6pm
-    else if (originalH >= 19 || originalH === 0) phonetic = 'Echo';   // 7pm-12am
-    else phonetic = 'Napa';                                         // 1am-6am
-    
-    // Show OFFSET hour with ORIGINAL phonetic: "10:36 Alpha"
-    return `${offsetH.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')} ${phonetic}`;
-}
-
-function handleNowExpansion(input) {
-    return input.replace(/@now\b/g, `@now — ${getNowTime()}`);
-}
-
-
-
 // =================== ROOM CREATION FUNCTIONS ===================
 
 async function createRoom() {
@@ -5476,35 +5448,6 @@ if (heptadBtn) {
       if (e.key === 'Enter') sendMessage();
     });
   }
-  
-  // @now auto-expansion
-if (messageInput) {
-    messageInput.addEventListener('input', function(e) {
-        const cursorPos = this.selectionStart;
-        const textBeforeCursor = this.value.substring(0, cursorPos);
-        
-        // Check if user just typed "@now"
-        if (textBeforeCursor.endsWith('@now') && 
-            textBeforeCursor.length >= 4 && 
-            (textBeforeCursor.length === 4 || 
-             /\s/.test(textBeforeCursor.charAt(textBeforeCursor.length - 5)))) {
-            
-            // Replace @now with time
-            const beforeNow = this.value.substring(0, cursorPos - 4);
-            const afterNow = this.value.substring(cursorPos);
-            const nowTime = getNowTime();
-            
-            this.value = beforeNow + `@now — ${nowTime} ` + afterNow;
-            
-            // Move cursor after the inserted time
-            setTimeout(() => {
-                const newPos = beforeNow.length + nowTime.length + 7; // +7 for "@now — "
-                this.setSelectionRange(newPos, newPos);
-            }, 10);
-        }
-    });
-}
-
   
   // Buttons
   document.getElementById('set-username-btn').addEventListener("click", setUsername);
