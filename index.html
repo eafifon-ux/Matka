@@ -1935,6 +1935,57 @@ h1 {
   <button class="dom-filter-remove" title="Clear filter">×</button>
 </div>
 </div>
+
+<!-- NEW WEEK FILTER CONTAINER -->
+<div id="week-filter-container">
+  <h4>Week Day Filter</h4>
+  <table class="week-filter-table">
+    <thead>
+      <tr>
+        <th>American</th>
+        <th>W</th>
+        <th>TH</th>
+        <th>F</th>
+        <th>S</th>
+        <th>SN</th>
+        <th>M</th>
+        <th>T</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Day Dots</td>
+        <td data-day-index="0" class="filter-day" data-day-name="W">🟠</td>
+        <td data-day-index="1" class="filter-day" data-day-name="TH">🟤</td>
+        <td data-day-index="2" class="filter-day" data-day-name="F">🌺</td>
+        <td data-day-index="3" class="filter-day" data-day-name="S">⚫</td>
+        <td data-day-index="4" class="filter-day" data-day-name="SN">🟢</td>
+        <td data-day-index="5" class="filter-day" data-day-name="M">🔵</td>
+        <td data-day-index="6" class="filter-day" data-day-name="T">🟣</td>
+      </tr>
+      <tr>
+        <td>GPC</td>
+        <td data-day-index="0" class="filter-day" data-day-name="UN">FR</td>
+        <td data-day-index="1" class="filter-day" data-day-name="DU">FV</td>
+        <td data-day-index="2" class="filter-day" data-day-name="TR">SS</td>
+        <td data-day-index="3" class="filter-day" data-day-name="FR">SH</td>
+        <td data-day-index="4" class="filter-day" data-day-name="FV">UN</td>
+        <td data-day-index="5" class="filter-day" data-day-name="SS">DU</td>
+        <td data-day-index="6" class="filter-day" data-day-name="SH">TR</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="week-filter-buttons">
+    <button id="prev-day-btn">⬅️ PREV</button>
+    <button id="next-day-btn">NEXT ➡️</button>
+  </div>
+  <div id="filter-status" class="filter-status" style="display: none;">
+    Showing messages from <span id="current-filter-day">Wednesday</span>
+    <button class="filter-remove" title="Clear filter">×</button>
+  </div>
+</div>
+
+
 <!-- NEW DOS FILTER CONTAINER -->
 <div id="dos-filter-container">
   <h4>Day of Season Filter</h4>
@@ -2012,56 +2063,6 @@ h1 {
   </div>
 </div>
 
-
-
-<!-- NEW WEEK FILTER CONTAINER -->
-<div id="week-filter-container">
-  <h4>Week Day Filter</h4>
-  <table class="week-filter-table">
-    <thead>
-      <tr>
-        <th>American</th>
-        <th>W</th>
-        <th>TH</th>
-        <th>F</th>
-        <th>S</th>
-        <th>SN</th>
-        <th>M</th>
-        <th>T</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Day Dots</td>
-        <td data-day-index="0" class="filter-day" data-day-name="W">🟠</td>
-        <td data-day-index="1" class="filter-day" data-day-name="TH">🟤</td>
-        <td data-day-index="2" class="filter-day" data-day-name="F">🌺</td>
-        <td data-day-index="3" class="filter-day" data-day-name="S">⚫</td>
-        <td data-day-index="4" class="filter-day" data-day-name="SN">🟢</td>
-        <td data-day-index="5" class="filter-day" data-day-name="M">🔵</td>
-        <td data-day-index="6" class="filter-day" data-day-name="T">🟣</td>
-      </tr>
-      <tr>
-        <td>GPC</td>
-        <td data-day-index="0" class="filter-day" data-day-name="UN">FR</td>
-        <td data-day-index="1" class="filter-day" data-day-name="DU">FV</td>
-        <td data-day-index="2" class="filter-day" data-day-name="TR">SS</td>
-        <td data-day-index="3" class="filter-day" data-day-name="FR">SH</td>
-        <td data-day-index="4" class="filter-day" data-day-name="FV">UN</td>
-        <td data-day-index="5" class="filter-day" data-day-name="SS">DU</td>
-        <td data-day-index="6" class="filter-day" data-day-name="SH">TR</td>
-      </tr>
-    </tbody>
-  </table>
-  <div class="week-filter-buttons">
-    <button id="prev-day-btn">⬅️ PREV</button>
-    <button id="next-day-btn">NEXT ➡️</button>
-  </div>
-  <div id="filter-status" class="filter-status" style="display: none;">
-    Showing messages from <span id="current-filter-day">Wednesday</span>
-    <button class="filter-remove" title="Clear filter">×</button>
-  </div>
-</div>
 
 <!-- ADMIN CONTROLS -->
 <div class="admin-controls" id="admin-controls">
