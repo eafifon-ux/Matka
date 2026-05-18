@@ -2157,7 +2157,9 @@ h1 {
       <button class="cancel-reply" title="Cancel reply">×</button>
     </div>
     <div class="input-row">
-      <input type="text" id="message-input" dir="auto" placeholder="Type your message..." autocomplete="off" disabled />
+      <textarea id="message-input" dir="auto" placeholder="Type your message…" autocomplete="off" disabled
+  rows="1" style="resize:vertical; min-height:44px; max-height:150px; line-height:1.4;"></textarea>
+
       <button id="send-btn">Send</button>
     </div>
   </div>
@@ -4640,6 +4642,7 @@ async function sendMessage() {
   if (!text) return;
   
   input.value = '';
+  input.style.height = "44px";
   input.disabled = true;
   
   try {
@@ -5482,12 +5485,16 @@ if (heptadBtn) {
   }
   
   // Message input
-  const messageInput = document.getElementById("message-input");
-  if (messageInput) {
-    messageInput.addEventListener("keypress", (e) => {
-      if (e.key === 'Enter') sendMessage();
-    });
-  }
+  // Message input
+const messageInput = document.getElementById("message-input");
+if (messageInput) {
+  // (no keypress listener – Enter now inserts newline)
+  messageInput.addEventListener("input", function() {
+    this.style.height = "auto";
+    this.style.height = this.scrollHeight + "px";
+  });
+}
+
   
   // @now auto-expansion
 if (messageInput) {
